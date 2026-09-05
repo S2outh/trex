@@ -1,24 +1,34 @@
-[package]
-name = "trex"
+[workspace]
+resolver = "3"
+members = ["app", "bootloader"]
+
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = [ "Eliseo Cailloux" ]
 
-[dependencies]
 
-embassy-stm32 = { version = "0.6.0", features = [ "defmt", "time", "time-driver-any", "stm32h723vg", "memory-x", "unstable-pac", "exti"]  }
+[workspace.dependencies]
+embassy-stm32 = { version = "0.6.0", features = [ "defmt", "time", "time-driver-any", "stm32h723vg", "unstable-pac", "exti"]  }
 embassy-sync = { version = "0.8.0", features = ["defmt"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"] }
 embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-1_000_000"] }
 embassy-futures = { version = "0.1.2" }
 
-defmt = "1.1"
-defmt-rtt = "1.3"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
+embassy-boot-stm32 = "0.8.0"
 
 cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.6"
-heapless = { version = "0.9", default-features = false }
+
+defmt = "1.1"
+
+[profile.dev]
+opt-level = 3
+debug = 2
+debug-assertions = false
+lto = true
+codegen-units = 16
 
 [profile.release]
+lto = true
 debug = 2

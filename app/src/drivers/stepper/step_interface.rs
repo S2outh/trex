@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use embassy_stm32::{
     Peri, gpio::Flex, time::Hertz, timer::{
-        GeneralInstance4Channel, TimerChannel, TimerPin, low_level::{CountingMode, OutputCompareMode, RoundTo, Timer},
+        GeneralInstance4Channel, TimerChannel, TimerPin, low_level::{CountingMode, MasterMode, OutputCompareMode, RoundTo, Timer},
     },
 };
 
@@ -20,30 +20,32 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> PulsePin<'d, T, C> {
     }
 }
 
-pub struct PulseGenerator<'d, T: GeneralInstance4Channel, C> {
+pub(super) struct StepInterface<'d, T: GeneralInstance4Channel, C> {
     inner: Timer<'d, T>,
     output: Flex<'d>,
     phantom: PhantomData<C>
 }
 
-impl<'d, T: GeneralInstance4Channel, C: TimerChannel> PulseGenerator<'d, T, C> {
-    pub fn new(tim: Peri<'d, T>, output: PulsePin<'d, T, C>, init_freq: Hertz) -> Self {
+impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
+    pub fn new(tim: Peri<'d, T>, output: PulsePin<'d, T, C>) -> Self {
         let inner = Timer::new(tim);
         let output = output.pin;
 
         // Initialize timer
         inner.set_counting_mode(CountingMode::EdgeAlignedUp);
-        inner.set_frequency(init_freq, RoundTo::Slower);
         inner.enable_outputs();
 
         // Initialize timer output
         inner.set_output_compare_mode(C::CHANNEL, OutputCompareMode::Toggle);
 
+        // Set master mode for counter
+        inner.set_master_mode(MasterMode::UPDATE);
+
         // Enable preloading into shadow registers, only apply on update event
         inner.set_output_compare_preload(C::CHANNEL, true);
         inner.set_autoreload_preload(true);
 
-        // Apply and start
+        // Apply
         inner.generate_update_event();
 
         Self {
