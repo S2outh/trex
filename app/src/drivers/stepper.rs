@@ -11,19 +11,20 @@ use crate::drivers::stepper::step_interface::{StepInterface, PulsePin};
 pub struct Stepper<'d, T: GeneralInstance4Channel, C> {
     step_interface: StepInterface<'d, T, C>,
     dir: Output<'d>,
-    enable: Output<'d>,
+    _disable: Output<'d>,
 
     angle_factor: f64,
 }
 
 impl<'d, T: GeneralInstance4Channel, C: TimerChannel> Stepper<'d, T, C> {
-    pub fn new(timer: Peri<'d, T>, step: PulsePin<'d, T, C>, dir: Output<'d>, enable: Output<'d>, steps_per_rev: u32) -> Self {
+    pub fn new(timer: Peri<'d, T>, step: PulsePin<'d, T, C>, dir: Output<'d>, mut disable: Output<'d>, steps_per_rev: u32) -> Self {
         let step_interface = StepInterface::new(timer, step);
         let angle_factor = steps_per_rev as f64 / (2. * consts::PI);
+        disable.set_low();
         Self {
             step_interface,
             dir,
-            enable,
+            _disable: disable,
             angle_factor,
         }
     }
@@ -35,12 +36,10 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> Stepper<'d, T, C> {
         self.step_interface
             .set_frequency(hz(frequency as u32));
         self.step_interface.start();
-        self.enable.set_high();
     }
 
     pub fn stop(&mut self) {
         self.step_interface.stop();
-        self.enable.set_low();
     }
 
     fn set_dir(&mut self, dir: f64) {

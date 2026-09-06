@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
 
-use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use core::net::{Ipv4Addr, SocketAddr};
 
 use defmt::*;
 use embassy_nats::UserPwdAuthenticator;
 use embassy_net::dns::DnsQueryType;
-use embassy_net::{Stack, StackResources};
+use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_net::tcp::TcpSocket;
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
@@ -19,22 +19,29 @@ use embassy_stm32::{Config, gpio::Level};
 use embassy_stm32::gpio::{Output, Speed};
 use embassy_stm32::{bind_interrupts, rcc, rng};
 use embassy_time::{Duration, Timer};
+use heapless::Vec;
 use static_cell::StaticCell;
-//use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
+
+use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
 use crate::update::{FirmwareManager, FirmwareManagerStorage};
 
-use {defmt_rtt as _, panic_probe as _};
+use {defmt_rtt as _, panic_reset as _};
 
-//mod drivers;
+mod drivers;
 mod update;
 
 // General setup stuff
-const WATCHDOG_TIMEOUT_US: u32 = 300_000;
+const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
 const WATCHDOG_PETTING_INTERVAL_US: u32 = WATCHDOG_TIMEOUT_US / 2;
 
-const FIRMWARE_UPDATE_PORT: u16 = 1028;
-const FIRMWARE_UPDATE_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, FIRMWARE_UPDATE_PORT));
+const IP_CONFIG: StaticConfigV4 = StaticConfigV4 {
+    address: Ipv4Cidr::new(Ipv4Addr::new(192, 168, 0, 10), 24),
+    gateway: None,
+    dns_servers: Vec::from_array([Ipv4Addr::new(192, 168, 0, 1)]),
+};
+
+const FIRMWARE_UPDATE_PORT: u16 = 3000;
 
 // Storage setup
 static FIRMWARE_STORAGE: StaticCell<FirmwareManagerStorage> = StaticCell::new();
@@ -73,7 +80,7 @@ const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 
 // Devices
-//const STEPPS_PER_REV: u32 = 12_000;
+const STEPPS_PER_REV: u32 = 100_000;
 
 type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
@@ -208,7 +215,7 @@ async fn main(spawner: Spawner) {
         mdc,
     );
 
-    let net_cfg = embassy_net::Config::dhcpv4(Default::default());
+    let net_cfg = embassy_net::Config::ipv4_static(IP_CONFIG);
 
     // Initialize network stack
     info!("Initializing network task");
@@ -231,7 +238,7 @@ async fn main(spawner: Spawner) {
     // Initialize firmware manager
     let flash = Flash::new(p.FLASH, Irqs);
     let storage = FIRMWARE_STORAGE.init(FirmwareManagerStorage::new(flash).await);
-    let runner = FirmwareManager::new(storage, socket, FIRMWARE_UPDATE_ADDR).await;
+    let runner = FirmwareManager::new(storage, socket, FIRMWARE_UPDATE_PORT).await;
 
     // launch firmware manager task
     spawner.spawn(firmware_manager_task(runner).unwrap());
@@ -257,22 +264,22 @@ async fn main(spawner: Spawner) {
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
 
-    // let step = PulsePin::new(p.PA0);
-    // let dir = Output::new(p.PE7, Level::Low, Speed::Medium);
-    // let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
+    let step = PulsePin::new(p.PA0);
+    let dir = Output::new(p.PE7, Level::Low, Speed::Medium);
+    let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
 
-    // let mut stepper = Stepper::new(p.TIM2, step, dir, enable, STEPPS_PER_REV);
-    // stepper.set_speed(0.1);
-    // Timer::after(Duration::from_secs(1)).await;
-    // stepper.stop();
+    let mut stepper = Stepper::new(p.TIM2, step, dir, enable, STEPPS_PER_REV);
+    stepper.set_speed(0.1);
+    Timer::after(Duration::from_secs(1)).await;
+    stepper.stop();
     
     // LEDs on PE0..=PE4
-    let mut led = Output::new(p.PE0, Level::Low, Speed::Low);
+    let mut led = Output::new(p.PE2, Level::Low, Speed::Low);
 
 
     loop {
         led.toggle();
-        Timer::after(Duration::from_secs(1)).await;
+        Timer::after(Duration::from_millis(100)).await;
     }
 
     //core::future::pending::<()>().await;

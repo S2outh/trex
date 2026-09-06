@@ -323,6 +323,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73bfc955c9238df2ce9fecc6f18a64b13ecaa41a3cd42d940a09f304765d10db"
 dependencies = [
+ "defmt 1.1.1",
  "digest",
  "document-features",
  "embassy-embedded-hal",
@@ -341,6 +342,7 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
+ "defmt 1.1.1",
  "embassy-boot",
  "embassy-stm32",
  "embassy-sync",
@@ -934,6 +936,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "panic-reset"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cf1ff2a5b1a478dd94572aa43476b6630e72071cbd016985003ad3903a3a4f5"
+dependencies = [
+ "cortex-m",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1337,7 +1348,8 @@ dependencies = [
  "embassy-time",
  "embedded-alloc",
  "embedded-storage-async",
- "panic-probe",
+ "heapless",
+ "panic-reset",
  "portable-atomic",
  "static_cell",
 ]

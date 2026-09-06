@@ -18,7 +18,8 @@ embassy-boot-stm32.workspace = true
 defmt.workspace = true
 
 defmt-rtt = "1.3"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
+
+panic-reset = { version = "0.1.1" }
 
 static_cell = { version = "2.1.1", features = ["nightly"] }
 
@@ -31,3 +32,4 @@ embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git" }
 portable-atomic = "1.15.0"
 blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
+heapless = "0.9.3"

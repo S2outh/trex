@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["app", "bootloader"]
-
+default-members = ["app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,7 +15,7 @@ embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "execu
 embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-1_000_000"] }
 embassy-futures = { version = "0.1.2" }
 
-embassy-boot-stm32 = "0.8.0"
+embassy-boot-stm32 = { version = "0.8.0", features = ["defmt"] }
 
 cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.6"

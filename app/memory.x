@@ -11,8 +11,8 @@ MEMORY
 }
 
 /* Embassy flash partitions are offsets from the STM32 bank-1 base. */
-__bootloader_state_start  = ORIGIN(BOOTLOADER_STATE) - ORIGIN(FLASH);
-__bootloader_state_end    = ORIGIN(BOOTLOADER_STATE) + LENGTH(BOOTLOADER_STATE) - ORIGIN(FLASH);
+__bootloader_state_start = ORIGIN(BOOTLOADER_STATE) - ORIGIN(BOOTLOADER);
+__bootloader_state_end = ORIGIN(BOOTLOADER_STATE) + LENGTH(BOOTLOADER_STATE) - ORIGIN(BOOTLOADER);
 
-__bootloader_dfu_start    = ORIGIN(DFU) - ORIGIN(FLASH);
-__bootloader_dfu_end      = ORIGIN(DFU) + LENGTH(DFU) - ORIGIN(FLASH);
+__bootloader_dfu_start = ORIGIN(DFU) - ORIGIN(BOOTLOADER);
+__bootloader_dfu_end = ORIGIN(DFU) + LENGTH(DFU) - ORIGIN(BOOTLOADER);

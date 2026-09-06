@@ -12,7 +12,8 @@ use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::Mutex;
 
 const FLASH_COPY_BUFFER_SIZE: usize = 2048;
-const WATCHDOG_TIMEOUT_US: u32 = 300_000;
+// This timeout is only relevant until the main firmware boots.
+const WATCHDOG_TIMEOUT_US: u32 = 12_000_000;
 
 #[entry]
 fn main() -> ! {

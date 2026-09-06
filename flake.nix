@@ -48,6 +48,12 @@
 
             # for flashing
             probe-rs-tools
+
+            # for pushing firmware to the update server over ethernet
+            netcat-openbsd
+
+            # for hashing
+            b3sum
           ];
 
           # set the rust src for rust_analyzer
