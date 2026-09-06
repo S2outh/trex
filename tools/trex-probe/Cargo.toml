@@ -1,0 +1,5 @@
+[package]
+name = "trex-probe"
+version.workspace = true
+edition.workspace = true
+

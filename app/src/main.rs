@@ -24,12 +24,12 @@ use static_cell::StaticCell;
 
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
-use crate::update::{FirmwareManager, FirmwareManagerStorage};
+use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
 
 use {defmt_rtt as _, panic_reset as _};
 
 mod drivers;
-mod update;
+mod firmware_manager;
 
 // General setup stuff
 const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;

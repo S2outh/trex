@@ -432,7 +432,7 @@ dependencies = [
 [[package]]
 name = "embassy-nats"
 version = "0.1.0"
-source = "git+https://github.com/S2outh/embassy-nats.git#301c1d0556dd5a66d276df38d7e3c617ef98ea78"
+source = "git+https://github.com/S2outh/embassy-nats.git#6cd0dcef943fa7c422cc5b05414d818b2049e641"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -920,6 +920,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_enum"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0bca838442ec211fa11de3a8b0e0e8f3a4522575b5c4c06ed722e005036f26"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1352,6 +1373,7 @@ dependencies = [
  "panic-reset",
  "portable-atomic",
  "static_cell",
+ "trex-transport",
 ]
 
 [[package]]
@@ -1365,6 +1387,18 @@ dependencies = [
  "embassy-boot-stm32",
  "embassy-stm32",
  "embassy-sync",
+]
+
+[[package]]
+name = "trex-probe"
+version = "0.1.0"
+
+[[package]]
+name = "trex-transport"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "num_enum",
 ]
 
 [[package]]

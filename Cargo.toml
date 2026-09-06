@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["app", "bootloader"]
+members = ["app", "bootloader", "crates/*", "tools/*"]
 default-members = ["app"]
 
 [workspace.package]
@@ -21,6 +21,8 @@ cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = "0.7.6"
 
 defmt = "1.1"
+
+blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
 
 [profile.dev]
 opt-level = 3

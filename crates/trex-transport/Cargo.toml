@@ -1,0 +1,9 @@
+[package]
+name = "trex-transport"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+blake3.workspace = true
+num_enum = { version = "0.7.6", default-features = false }
+

@@ -1,4 +1,5 @@
 
+use trex_transport::*;
 use embassy_boot_stm32::{AlignedBuffer, FirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_futures::yield_now;
 use embassy_net::tcp::{self, TcpSocket};
@@ -8,8 +9,6 @@ use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<'a, NoopRawMutex, embassy_stm32::flash::Flash<'a>>;
 type MtxFlash<'a> = Mutex<NoopRawMutex, Flash<'a, Async>>;
 
-type Hash = [u8; blake3::OUT_LEN];
-
 // In case of unexpected states this manager does not propagate errors,
 // but instead reset the application.
 macro_rules! reset {
@@ -17,28 +16,6 @@ macro_rules! reset {
         defmt::warn!("[FW MGR] Reset");
         cortex_m::peripheral::SCB::sys_reset();
     }};
-}
-
-const CHUNK_SIZE: usize = 4096;
-const MAGIC: [u8; 8] = *b"LEMMINGE";
-const VALIDATE_HEADER_ID: u8 = 0;
-const CHUNK_HEADER_ID: u8 = 1;
-const APPLY_HEADER_ID: u8 = 2;
-const RESET_HEADER_ID: u8 = 3;
-
-
-enum Header {
-    Validate,
-    Chunk {
-        offset: usize,
-        size: usize,
-    },
-    Apply {
-        size: usize,
-        hash: Hash,
-    },
-    Reset,
-    Invalid,
 }
 
 pub struct FirmwareManagerStorage<'a> {
@@ -92,62 +69,18 @@ impl<'a> FirmwareManager<'a> {
                 return Err(tcp::Error::ConnectionReset)
             }
             pos += bytes_read;
-            // Yield here to not block incase of large blocks of data
+            // Yield here to not block in case of large blocks of data
             yield_now().await;
         }
         Ok(())
     }
-    async fn read<const N: usize>(&mut self) -> Result<[u8; N], tcp::Error> {
-        let mut buf = [0; _];
-        self.read_buf(&mut buf, N).await?;
-        Ok(buf)
-    }
-    async fn read_byte(&mut self) -> Result<u8, tcp::Error> {
-        Ok(u8::from_le_bytes(self.read().await?))
-    }
-    async fn read_word(&mut self) -> Result<usize, tcp::Error> {
-        Ok(usize::from_le_bytes(self.read().await?))
-    }
-    async fn read_header(&mut self) -> Result<Header, tcp::Error> {
-        match self.read_byte().await? {
-            VALIDATE_HEADER_ID => Ok(Header::Validate),
-            CHUNK_HEADER_ID => {
-                let offset = self.read_word().await?;
-                let size = self.read_word().await?;
-
-                if size > CHUNK_SIZE {
-                    Ok(Header::Invalid)
-                } else {
-                    Ok(Header::Chunk { offset, size })
-                }
-            },
-            APPLY_HEADER_ID => {
-                let size = self.read_word().await?;
-                let hash = self.read().await?;
-                Ok(Header::Apply { size, hash })
-            },
-            RESET_HEADER_ID => Ok(Header::Reset),
-            _ => Ok(Header::Invalid)
-        }
-    }
-    async fn sync(&mut self) -> Result<Header, tcp::Error>  {
-        let mut magic_pos = 0;
-        loop {
-            let byte = self.read_byte().await?;
-            if byte == MAGIC[magic_pos] {
-                magic_pos += 1;
-                if magic_pos == MAGIC.len() {
-                    return self.read_header().await;
-                }
-            } else {
-                magic_pos = 0;
-            }
-        }
-    }
     async fn run_connected(&mut self) {
         loop {
-            let Ok(header) = self.sync().await else {
-                defmt::error!("[FW MGR] Disconnected");
+            let Ok(header) =
+                HeaderDeserializer::new(async |a, b| self.read_buf(a, b).await)
+                .sync().await else {
+
+                defmt::warn!("[FW MGR] Disconnected");
                 return;
             };
             match header {
@@ -157,7 +90,7 @@ impl<'a> FirmwareManager<'a> {
 
                     let mut chunk = AlignedBuffer([0; CHUNK_SIZE]);
                     if let Err(e) = self.read_buf(chunk.as_mut(), size).await {
-                        defmt::error!("[FW MGR] Disconnected: {}", e);
+                        defmt::warn!("[FW MGR] Disconnected: {}", e);
                         return;
                     };
 
@@ -193,7 +126,7 @@ impl<'a> FirmwareManager<'a> {
                     reset!()
                 },
                 Header::Reset => reset!(),
-                Header::Invalid => defmt::warn!("[FW MGR] Received invalid Header!"),
+                Header::Invalid(t) => defmt::warn!("[FW MGR] Received invalid Header! [{}]", t),
             }
         }
     }

@@ -25,7 +25,7 @@
         std-lib = fpkgs.targets.thumbv7em-none-eabihf.latest;
         rust-analyzer-nightly = fpkgs.rust-analyzer;
         rust-toolchain = fpkgs.combine [
-          profile.rustc-unwrapped
+          profile.rustc
           profile.rust-src
           profile.cargo
           profile.rustfmt
