@@ -80,7 +80,7 @@ const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 
 // Devices
-const STEPPS_PER_REV: u32 = 100_000;
+const STEPPS_PER_REV: u32 = 12_000;
 
 type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
@@ -269,8 +269,8 @@ async fn main(spawner: Spawner) {
     let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
 
     let mut stepper = Stepper::new(p.TIM2, step, dir, enable, STEPPS_PER_REV);
-    stepper.set_speed(0.1);
-    Timer::after(Duration::from_secs(1)).await;
+    stepper.set_speed(-0.1);
+    Timer::after(Duration::from_millis(700)).await;
     stepper.stop();
     
     // LEDs on PE0..=PE4

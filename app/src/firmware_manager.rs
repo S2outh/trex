@@ -61,10 +61,10 @@ impl<'a> FirmwareManager<'a> {
             self.updater.mark_booted().await.unwrap_or_else(|_| reset!())
         }
     }
-    async fn read_buf(&mut self, buf: &mut [u8], size: usize) -> Result<(), tcp::Error> {
+    async fn read_buf(&mut self, buf: &mut [u8]) -> Result<(), tcp::Error> {
         let mut pos = 0;
-        while pos < size {
-            let bytes_read = self.socket.read(&mut buf[pos..size]).await?;
+        while pos < buf.len() {
+            let bytes_read = self.socket.read(&mut buf[pos..]).await?;
             if bytes_read == 0 {
                 return Err(tcp::Error::ConnectionReset)
             }
@@ -77,7 +77,7 @@ impl<'a> FirmwareManager<'a> {
     async fn run_connected(&mut self) {
         loop {
             let Ok(header) =
-                HeaderDeserializer::new(async |a, b| self.read_buf(a, b).await)
+                HeaderDeserializer::new(async |a| self.read_buf(a).await)
                 .sync().await else {
 
                 defmt::warn!("[FW MGR] Disconnected");
@@ -89,7 +89,7 @@ impl<'a> FirmwareManager<'a> {
                     defmt::info!("[FW MGR] Received chunk, offset: {}, size: {}", offset, size);
 
                     let mut chunk = AlignedBuffer([0; CHUNK_SIZE]);
-                    if let Err(e) = self.read_buf(chunk.as_mut(), size).await {
+                    if let Err(e) = self.read_buf(&mut chunk.as_mut()[..size]).await {
                         defmt::warn!("[FW MGR] Disconnected: {}", e);
                         return;
                     };

@@ -34,14 +34,14 @@ pub enum Header {
 
 pub struct HeaderDeserializer<F, E> 
 where
-    F: AsyncFnMut(&mut [u8], usize) -> Result<(), E>
+    F: AsyncFnMut(&mut [u8]) -> Result<(), E>
 {
     read_buf: F
 }
 
 impl<F, E> HeaderDeserializer<F, E>
 where
-    F: AsyncFnMut(&mut [u8], usize) -> Result<(), E>
+    F: AsyncFnMut(&mut [u8]) -> Result<(), E>
 {
     pub fn new(read_buf: F) -> Self {
         Self { read_buf }
@@ -49,7 +49,7 @@ where
 
     async fn read<const N: usize>(&mut self) -> Result<[u8; N], E> {
         let mut buf = [0; _];
-        (self.read_buf)(&mut buf, N).await?;
+        (self.read_buf)(&mut buf).await?;
         Ok(buf)
     }
 
@@ -58,7 +58,7 @@ where
     }
 
     async fn read_word(&mut self) -> Result<usize, E> {
-        Ok(usize::from_le_bytes(self.read().await?))
+        Ok(u32::from_le_bytes(self.read().await?) as usize)
     }
 
     async fn read_header(&mut self) -> Result<Header, E> {
@@ -81,7 +81,7 @@ where
                 Header::Apply { size, hash }
             },
             HeaderType::Reset => Header::Reset,
-            HeaderType::Invalid(t) => Header::Invalid(t)
+            HeaderType::Invalid(t) => Header::Invalid(t),
         };
         Ok(header)
     }
@@ -99,5 +99,54 @@ where
                 magic_pos = 0;
             }
         }
+    }
+}
+
+pub struct HeaderSerializer<F, E> 
+where
+    F: FnMut(&[u8]) -> Result<(), E>
+{
+    write_buf: F
+}
+
+impl<F, E> HeaderSerializer<F, E>
+where
+    F: FnMut(&[u8]) -> Result<(), E>
+{
+    pub fn new(write_buf: F) -> Self {
+        Self { write_buf }
+    }
+
+    fn write_byte(&mut self, v: u8) -> Result<(), E> {
+        Ok((self.write_buf)(&v.to_le_bytes())?)
+    }
+
+    fn write_word(&mut self, v: usize) -> Result<(), E> {
+        Ok((self.write_buf)(&(v as u32).to_le_bytes())?)
+    }
+
+    pub fn write_header(&mut self, header: Header) -> Result<(), E> {
+        (self.write_buf)(&MAGIC)?;
+
+        match header {
+            Header::Validate => {
+                self.write_byte(HeaderType::Validate.into())?;
+            },
+            Header::Chunk { offset, size } => {
+                self.write_byte(HeaderType::Chunk.into())?;
+                self.write_word(offset)?;
+                self.write_word(size)?;
+            },
+            Header::Apply { size, hash } => {
+                self.write_byte(HeaderType::Apply.into())?;
+                self.write_word(size)?;
+                (self.write_buf)(&hash)?;
+            },
+            Header::Reset => {
+                self.write_byte(HeaderType::Reset.into())?;
+            },
+            Header::Invalid(_) => (),
+        }
+        Ok(())
     }
 }
