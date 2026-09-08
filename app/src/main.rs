@@ -49,6 +49,8 @@ static FIRMWARE_STORAGE: StaticCell<FirmwareManagerStorage> = StaticCell::new();
 // Heap setup
 const HEAP_KB: usize = 64;
 
+extern crate alloc;
+
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
@@ -78,6 +80,8 @@ const NATS_ADDR: &str = "nats.lan";
 const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
+
+static CH: embassy_nats::MsgChannel = embassy_nats::MsgChannel::new();
 
 // Devices
 const STEPPS_PER_REV: u32 = 12_000;
@@ -258,7 +262,7 @@ async fn main(spawner: Spawner) {
     };
 
     // nats connection
-    let (mut _client, runner) =
+    let (mut client, runner) =
         embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE);
 
     // launch nats task
@@ -269,17 +273,27 @@ async fn main(spawner: Spawner) {
     let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
 
     let mut stepper = Stepper::new(p.TIM2, step, dir, enable, STEPPS_PER_REV);
-    stepper.set_speed(-0.1);
-    Timer::after(Duration::from_millis(700)).await;
-    stepper.stop();
     
     // LEDs on PE0..=PE4
     let mut led = Output::new(p.PE2, Level::Low, Speed::Low);
 
+    #[derive(serde::Deserialize)]
+    struct TestTarget {
+        v: f64
+    }
 
+    client.subscribe(alloc::string::String::from("trex.testing.target"), &CH).await;
     loop {
         led.toggle();
-        Timer::after(Duration::from_millis(100)).await;
+        let nats_msg = client.receive().await;
+        match minicbor_serde::from_slice::<TestTarget>(&nats_msg.data) {
+            Ok(cmd) => {
+                stepper.set_speed(cmd.v);
+                Timer::after(Duration::from_secs(1)).await;
+                stepper.stop();
+            },
+            Err(e) => defmt::warn!("could not decode cmd: {}", defmt::Debug2Format(&e)),
+        }
     }
 
     //core::future::pending::<()>().await;

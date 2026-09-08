@@ -4,7 +4,7 @@ use core::f64::consts;
 use embassy_stm32::{Peri, gpio::Output, time::hz, timer::{GeneralInstance4Channel, TimerChannel}};
 
 pub mod step_interface;
-mod step_counter;
+//mod step_counter;
 
 use crate::drivers::stepper::step_interface::{StepInterface, PulsePin};
 

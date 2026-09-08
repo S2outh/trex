@@ -21,7 +21,7 @@ pub struct FlashConf {
     pub max_size: Option<u64>,
 }
 
-const PR_TEMPLATE: &str = "{spinner} {bar:70.green/blue}   Sending Chunk: {pos}/{len}  [{elapsed}]";
+const PR_TEMPLATE: &str = "{spinner} {bar:60.green/blue} Sending Chunk: {pos}/{len} [{elapsed}]";
 const PR_CHARS: &str = "##-";
 
 pub fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
@@ -29,7 +29,7 @@ pub fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
     println!("{} Flashing...", style("[RUN]").yellow());
     flash(net_conf, flash_conf).context("Failed to flash")?;
 
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(2));
 
     println!("{} Validating...", style("[RUN]").yellow());
     validate(net_conf).context("Validation failed")?;
