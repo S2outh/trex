@@ -18,7 +18,7 @@ pub struct NetConf {
 pub struct FlashConf {
     pub path: PathBuf,
     pub base: Option<u64>,
-    pub size: Option<u64>,
+    pub max_size: Option<u64>,
 }
 
 const PR_TEMPLATE: &str = "{spinner} {bar:70.green/blue}   Sending Chunk: {pos}/{len}  [{elapsed}]";

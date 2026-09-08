@@ -2,6 +2,7 @@
 use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
+use clap_num::maybe_hex;
 use trex_probe::{FlashConf, NetConf};
 
 #[derive(Parser)]
@@ -11,7 +12,7 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    #[arg(long, short, default_value = "192.168.0.10")]
+    #[arg(long, short, default_value = "trex.lan")]
     pub host: String,
 
     #[arg(long, short, default_value_t = 3000)]
@@ -36,9 +37,11 @@ pub struct FlashArgs {
     /// path to the executable
     pub path: PathBuf,
     /// base offset to optionally check against
+    #[arg(long, value_parser=maybe_hex::<u64>)]
     pub base: Option<u64>,
     /// length of active partition to optionally check against
-    pub size: Option<u64>,
+    #[arg(long, value_parser=maybe_hex::<u64>)]
+    pub max_size: Option<u64>,
 }
 
 impl From<&Cli> for NetConf {
@@ -49,6 +52,6 @@ impl From<&Cli> for NetConf {
 
 impl From<FlashArgs> for FlashConf {
     fn from(v: FlashArgs) -> Self {
-        FlashConf { path: v.path, base: v.base, size: v.size }
+        FlashConf { path: v.path, base: v.base, max_size: v.max_size }
     }
 }
