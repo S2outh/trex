@@ -2447,7 +2447,6 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "defmt 1.1.1",
- "defmt-rtt",
  "embassy-boot-stm32",
  "embassy-embedded-hal",
  "embassy-executor",

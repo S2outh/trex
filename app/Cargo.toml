@@ -23,8 +23,6 @@ blake3.workspace = true
 serde.workspace = true
 minicbor-serde.workspace = true
 
-defmt-rtt = "1.3"
-
 panic-reset = { version = "0.1.1" }
 
 static_cell = { version = "2.1.1", features = ["nightly"] }

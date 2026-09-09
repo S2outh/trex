@@ -1,5 +1,5 @@
 [target.thumbv7em-none-eabihf]
-runner = "./run.sh"
+runner = "app/run.sh"
 
 rustflags = [
   "-C", "link-arg=-Tlink.x", # linker file

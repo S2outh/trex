@@ -98,7 +98,6 @@ impl<'a> FirmwareManager<'a> {
                 .sync()
                 .await
             else {
-                defmt::warn!("[FW MGR] Disconnected");
                 return;
             };
             match header {
@@ -111,12 +110,12 @@ impl<'a> FirmwareManager<'a> {
                     );
 
                     let mut chunk = AlignedBuffer([0; CHUNK_SIZE]);
-                    if let Err(e) = self.read_buf(&mut chunk.as_mut()[..size]).await {
-                        defmt::warn!("[FW MGR] Disconnected: {}", e);
+                    if let Err(_) = self.read_buf(&mut chunk.as_mut()[..size]).await {
                         return;
                     };
 
                     if !self.validated {
+                        defmt::warn!("[FW MGR] Not validated, ignoring incoming chunk");
                         continue;
                     }
 
@@ -126,6 +125,7 @@ impl<'a> FirmwareManager<'a> {
                 }
                 Header::Apply { size, hash } => {
                     if !self.validated {
+                        defmt::warn!("[FW MGR] Not validated, ignoring apply cmd");
                         continue;
                     }
 

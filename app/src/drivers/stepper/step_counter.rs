@@ -1,7 +1,7 @@
 use embassy_stm32::{
     Peri,
     timer::{
-        Channel, GeneralInstance32bit4Channel,
+        GeneralInstance32bit4Channel,
         low_level::{CountingMode, SlaveMode, Timer, TriggerSource},
     },
 };
@@ -30,6 +30,6 @@ impl<'d, T: GeneralInstance32bit4Channel> StepCounter<'d, T> {
         Self { inner }
     }
     pub fn get(&mut self) -> u32 {
-        self.inner.get_capture_value(Channel::Ch1).into()
+        self.inner.regs_gp32().cnt().read()
     }
 }

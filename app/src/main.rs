@@ -28,11 +28,13 @@ use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
+use crate::logger::TcpEncoder;
 
-use {defmt_rtt as _, panic_reset as _};
+use panic_reset as _;
 
 mod drivers;
 mod firmware_manager;
+mod logger;
 
 // General setup stuff
 const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
@@ -43,6 +45,8 @@ const IP_CONFIG: StaticConfigV4 = StaticConfigV4 {
     gateway: None,
     dns_servers: Vec::from_array([Ipv4Addr::new(192, 168, 0, 1)]),
 };
+
+const LOGGER_PORT: u16 = 3001;
 
 const FIRMWARE_UPDATE_PORT: u16 = 3000;
 
@@ -76,6 +80,12 @@ static UPD_TCP_RX_BUF: StaticCell<[u8; UPD_TCP_RX_BUF_SIZE]> = StaticCell::new()
 
 const UPD_TCP_TX_BUF_SIZE: usize = 1024;
 static UPD_TCP_TX_BUF: StaticCell<[u8; UPD_TCP_TX_BUF_SIZE]> = StaticCell::new();
+
+const LOG_TCP_RX_BUF_SIZE: usize = 1024;
+static LOG_TCP_RX_BUF: StaticCell<[u8; LOG_TCP_RX_BUF_SIZE]> = StaticCell::new();
+
+const LOG_TCP_TX_BUF_SIZE: usize = 1024;
+static LOG_TCP_TX_BUF: StaticCell<[u8; LOG_TCP_TX_BUF_SIZE]> = StaticCell::new();
 
 // NATS
 static NATS_STORAGE: embassy_nats::Storage = embassy_nats::Storage::new();
@@ -134,6 +144,11 @@ async fn petter(mut watchdog: IndependentWatchdog<'static, IWDG1>) {
 
 #[embassy_executor::task]
 async fn net_task(mut runner: embassy_net::Runner<'static, EthDevice>) -> ! {
+    runner.run().await
+}
+
+#[embassy_executor::task]
+async fn logger_task(mut runner: TcpEncoder<'static>) -> ! {
     runner.run().await
 }
 
@@ -238,7 +253,20 @@ async fn main(spawner: Spawner) {
 
     info!("Network initialized");
 
-    // Initialize Updater socket
+    // Initialize logger socket
+    let socket = TcpSocket::new(
+        stack,
+        LOG_TCP_RX_BUF.init([0; _]),
+        LOG_TCP_TX_BUF.init([0; _]),
+    );
+
+    // Initialize logger
+    let runner = TcpEncoder::new(socket, LOGGER_PORT).await;
+
+    // launch logger task
+    spawner.spawn(logger_task(runner).unwrap());
+
+    // Initialize updater socket
     let socket = TcpSocket::new(
         stack,
         UPD_TCP_RX_BUF.init([0; _]),
