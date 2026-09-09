@@ -20,28 +20,22 @@ pub enum HeaderType {
 
 pub enum Header {
     Validate,
-    Chunk {
-        offset: usize,
-        size: usize,
-    },
-    Apply {
-        size: usize,
-        hash: Hash,
-    },
+    Chunk { offset: usize, size: usize },
+    Apply { size: usize, hash: Hash },
     Reset,
     Invalid(u8),
 }
 
-pub struct HeaderDeserializer<F, E> 
+pub struct HeaderDeserializer<F, E>
 where
-    F: AsyncFnMut(&mut [u8]) -> Result<(), E>
+    F: AsyncFnMut(&mut [u8]) -> Result<(), E>,
 {
-    read_buf: F
+    read_buf: F,
 }
 
 impl<F, E> HeaderDeserializer<F, E>
 where
-    F: AsyncFnMut(&mut [u8]) -> Result<(), E>
+    F: AsyncFnMut(&mut [u8]) -> Result<(), E>,
 {
     pub fn new(read_buf: F) -> Self {
         Self { read_buf }
@@ -74,12 +68,12 @@ where
                 } else {
                     Header::Chunk { offset, size }
                 }
-            },
+            }
             HeaderType::Apply => {
                 let size = self.read_word().await?;
                 let hash = self.read().await?;
                 Header::Apply { size, hash }
-            },
+            }
             HeaderType::Reset => Header::Reset,
             HeaderType::Invalid(t) => Header::Invalid(t),
         };
@@ -102,49 +96,53 @@ where
     }
 }
 
-pub struct HeaderSerializer<F, E> 
+pub struct HeaderSerializer<F, E>
 where
-    F: FnMut(&[u8]) -> Result<(), E>
+    F: AsyncFnMut(&[u8]) -> Result<(), E>,
 {
-    write_buf: F
+    write_buf: F,
 }
 
 impl<F, E> HeaderSerializer<F, E>
 where
-    F: FnMut(&[u8]) -> Result<(), E>
+    F: AsyncFnMut(&[u8]) -> Result<(), E>,
 {
     pub fn new(write_buf: F) -> Self {
         Self { write_buf }
     }
 
-    fn write_byte(&mut self, v: u8) -> Result<(), E> {
-        Ok((self.write_buf)(&v.to_le_bytes())?)
+    async fn write(&mut self, buf: &[u8]) -> Result<(), E> {
+        (self.write_buf)(buf).await
     }
 
-    fn write_word(&mut self, v: usize) -> Result<(), E> {
-        Ok((self.write_buf)(&(v as u32).to_le_bytes())?)
+    async fn write_byte(&mut self, v: u8) -> Result<(), E> {
+        self.write(&v.to_le_bytes()).await
     }
 
-    pub fn write_header(&mut self, header: Header) -> Result<(), E> {
-        (self.write_buf)(&MAGIC)?;
+    async fn write_word(&mut self, v: usize) -> Result<(), E> {
+        self.write(&(v as u32).to_le_bytes()).await
+    }
+
+    pub async fn write_header(&mut self, header: Header) -> Result<(), E> {
+        self.write(&MAGIC).await?;
 
         match header {
             Header::Validate => {
-                self.write_byte(HeaderType::Validate.into())?;
-            },
+                self.write_byte(HeaderType::Validate.into()).await?;
+            }
             Header::Chunk { offset, size } => {
-                self.write_byte(HeaderType::Chunk.into())?;
-                self.write_word(offset)?;
-                self.write_word(size)?;
-            },
+                self.write_byte(HeaderType::Chunk.into()).await?;
+                self.write_word(offset).await?;
+                self.write_word(size).await?;
+            }
             Header::Apply { size, hash } => {
-                self.write_byte(HeaderType::Apply.into())?;
-                self.write_word(size)?;
-                (self.write_buf)(&hash)?;
-            },
+                self.write_byte(HeaderType::Apply.into()).await?;
+                self.write_word(size).await?;
+                (self.write_buf)(&hash).await?;
+            }
             Header::Reset => {
-                self.write_byte(HeaderType::Reset.into())?;
-            },
+                self.write_byte(HeaderType::Reset.into()).await?;
+            }
             Header::Invalid(_) => (),
         }
         Ok(())

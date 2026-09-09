@@ -1,12 +1,13 @@
-use std::io::Write;
 use std::{fs, path::PathBuf};
-use std::net::{TcpStream};
+
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 
 use trex_transport::*;
 
+use anyhow::{Context, Result};
 use console::style;
 use indicatif::{ProgressIterator, ProgressStyle};
-use anyhow::{Context, Result};
 
 mod flash;
 
@@ -24,22 +25,19 @@ pub struct FlashConf {
 const PR_TEMPLATE: &str = "{spinner} {bar:60.green/blue} Sending Chunk: {pos}/{len} [{elapsed}]";
 const PR_CHARS: &str = "##-";
 
-pub fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
+pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
+    flash(net_conf, flash_conf)
+        .await
+        .context("Failed to flash")?;
 
-    println!("{} Flashing...", style("[RUN]").yellow());
-    flash(net_conf, flash_conf).context("Failed to flash")?;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    println!("{} Validating...", style("[RUN]").yellow());
-    validate(net_conf).context("Validation failed")?;
+    validate(net_conf).await.context("Validation failed")?;
 
     Ok(())
 }
 
-
-pub fn flash(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
-
+pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
     println!("{} Loading image", style("[FLASH]").cyan());
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
@@ -47,63 +45,84 @@ pub fn flash(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
 
     let size = object.len();
     flash::validate_object(base, size, flash_conf).context("ELF validation failed")?;
-    
+
     println!("{} Successfully loaded image", style("[FLASH]").cyan());
 
     let hash = blake3::hash(&object).into();
-    
+
     println!("{} Connecting to target...", style("[FLASH]").cyan());
 
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port)).context("could not connect to target")?;
+    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port))
+        .await
+        .context("could not connect to target")?;
 
     println!("{} Sending firmware...", style("[FLASH]").cyan());
 
-    let progress_style = ProgressStyle::with_template(PR_TEMPLATE).unwrap().progress_chars(PR_CHARS);
-    for (i, chunk) in object.chunks(CHUNK_SIZE).enumerate().progress_with_style(progress_style) {
+    let progress_style = ProgressStyle::with_template(PR_TEMPLATE)
+        .unwrap()
+        .progress_chars(PR_CHARS);
+    for (i, chunk) in object
+        .chunks(CHUNK_SIZE)
+        .enumerate()
+        .progress_with_style(progress_style)
+    {
         let offset = i * CHUNK_SIZE;
         let size = chunk.len();
-        HeaderSerializer::new(|a| tcp.write_all(a))
-            .write_header(Header::Chunk { offset, size }).context("could not send header")?;
+        HeaderSerializer::new(async |a| tcp.write_all(a).await)
+            .write_header(Header::Chunk { offset, size })
+            .await
+            .context("could not send header")?;
 
-        tcp.write_all(chunk).context("could not send chunk")?;
+        tcp.write_all(chunk).await.context("could not send chunk")?;
     }
 
     println!("{} Applying firmware...", style("[FLASH]").cyan());
 
-    HeaderSerializer::new(|a| tcp.write_all(a))
-        .write_header(Header::Apply { size, hash }).context("could not send header")?;
+    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+        .write_header(Header::Apply { size, hash })
+        .await
+        .context("could not send header")?;
 
     println!("{} Done!", style("[FLASH]").cyan());
-    
+
     Ok(())
 }
 
-pub fn validate(net_conf: &NetConf) -> Result<()> {
-
+pub async fn validate(net_conf: &NetConf) -> Result<()> {
     println!("{} Connecting to target...", style("[VALIDATE]").green());
 
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port)).context("could not connect to target")?;
+    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port))
+        .await
+        .context("could not connect to target")?;
 
-    println!("{} Sending validation request...", style("[VALIDATE]").green());
+    println!(
+        "{} Sending validation request...",
+        style("[VALIDATE]").green()
+    );
 
-    HeaderSerializer::new(|a| tcp.write_all(a))
-        .write_header(Header::Validate).context("could not send header")?;
-    
+    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+        .write_header(Header::Validate)
+        .await
+        .context("could not send header")?;
+
     println!("{} Done!", style("[VALIDATE]").green());
 
     Ok(())
 }
 
-pub fn reset(net_conf: &NetConf) -> Result<()> {
-
+pub async fn reset(net_conf: &NetConf) -> Result<()> {
     println!("{} Connecting to target...", style("[RESET]").red());
 
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port)).context("could not connect to target")?;
+    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.port))
+        .await
+        .context("could not connect to target")?;
 
     println!("{} Sending reset request...", style("[RESET]").red());
 
-    HeaderSerializer::new(|a| tcp.write_all(a))
-        .write_header(Header::Reset).context("could not send header")?;
+    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+        .write_header(Header::Reset)
+        .await
+        .context("could not send header")?;
 
     println!("{} Done!", style("[RESET]").red());
 

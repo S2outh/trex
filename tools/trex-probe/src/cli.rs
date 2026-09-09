@@ -1,6 +1,5 @@
-
-use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
+use std::path::PathBuf;
 
 use clap_num::maybe_hex;
 use trex_probe::{FlashConf, NetConf};
@@ -46,12 +45,19 @@ pub struct FlashArgs {
 
 impl From<&Cli> for NetConf {
     fn from(v: &Cli) -> Self {
-        NetConf { host: v.host.clone(), port: v.port }
+        NetConf {
+            host: v.host.clone(),
+            port: v.port,
+        }
     }
 }
 
 impl From<FlashArgs> for FlashConf {
     fn from(v: FlashArgs) -> Self {
-        FlashConf { path: v.path, base: v.base, max_size: v.max_size }
+        FlashConf {
+            path: v.path,
+            base: v.base,
+            max_size: v.max_size,
+        }
     }
 }

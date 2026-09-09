@@ -1,8 +1,12 @@
-use core::{marker::PhantomData};
+use core::marker::PhantomData;
 
 use embassy_stm32::{
-    Peri, gpio::{AfType, Flex, OutputType, Speed}, time::Hertz, timer::{
-        GeneralInstance4Channel, TimerChannel, TimerPin, low_level::{CountingMode, MasterMode, OutputCompareMode, RoundTo, Timer},
+    Peri,
+    gpio::{AfType, Flex, OutputType, Speed},
+    time::Hertz,
+    timer::{
+        GeneralInstance4Channel, TimerChannel, TimerPin,
+        low_level::{CountingMode, MasterMode, OutputCompareMode, RoundTo, Timer},
     },
 };
 
@@ -17,14 +21,17 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> PulsePin<'d, T, C> {
         let mut pin = Flex::new(pin);
         pin.set_low();
         pin.set_as_af_unchecked(af, AfType::output(OutputType::PushPull, Speed::VeryHigh));
-        Self { pin, phantom: PhantomData }
+        Self {
+            pin,
+            phantom: PhantomData,
+        }
     }
 }
 
-pub(super) struct StepInterface<'d, T: GeneralInstance4Channel, C> {
+pub struct StepInterface<'d, T: GeneralInstance4Channel, C> {
     inner: Timer<'d, T>,
     _output: Flex<'d>,
-    phantom: PhantomData<C>
+    phantom: PhantomData<C>,
 }
 
 impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
@@ -37,7 +44,7 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
         inner.enable_outputs();
 
         // Set master mode for counter
-        inner.set_master_mode(MasterMode::UPDATE);
+        inner.set_master_mode(MasterMode::ENABLE);
 
         // Initialize timer output
         inner.set_output_compare_mode(C::CHANNEL, OutputCompareMode::Toggle);
@@ -47,7 +54,7 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
 
         // Enable channel
         inner.enable_channel(C::CHANNEL, true);
-        
+
         // Apply
         inner.generate_update_event();
 

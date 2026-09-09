@@ -9,6 +9,8 @@ edition = "2024"
 
 
 [workspace.dependencies]
+
+# Embedded
 embassy-stm32 = { version = "0.6.0", features = [ "defmt", "time", "time-driver-any", "stm32h723vg", "unstable-pac", "exti"]  }
 embassy-sync = { version = "0.8.0", features = ["defmt"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"] }
@@ -22,7 +24,16 @@ cortex-m-rt = "0.7.6"
 
 defmt = "1.1"
 
+# Common
 blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
+
+serde = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
+minicbor-serde = { version = "0.7.1", features = ["alloc"] }
+
+# Tools
+tokio = { version = "1.53.1", features = [ "rt-multi-thread", "io-util", "macros", "time", "net" ] }
+clap = { version = "4.6.6", features = ["derive"] }
+anyhow = "1.0.104"
 
 [profile.dev]
 opt-level = 3

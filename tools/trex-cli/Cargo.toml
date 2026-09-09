@@ -4,9 +4,12 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-async-nats = "0.41.0"
-serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }
-minicbor-serde = { version = "0.6.2", features = ["alloc"] }
-tokio = { version = "1.45.0", features = [ "rt-multi-thread", "macros" ] }
-clap = { version = "4.6.6", features = ["derive"] }
-anyhow = "1.0.104"
+tokio.workspace = true
+
+serde.workspace = true
+minicbor-serde.workspace = true
+
+clap.workspace = true
+anyhow.workspace = true
+
+async-nats = "0.50.0"

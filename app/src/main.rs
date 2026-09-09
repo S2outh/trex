@@ -4,24 +4,27 @@
 use core::net::{Ipv4Addr, SocketAddr};
 
 use defmt::*;
+use embassy_executor::Spawner;
 use embassy_nats::UserPwdAuthenticator;
 use embassy_net::dns::DnsQueryType;
-use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_net::tcp::TcpSocket;
+use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
+use embassy_stm32::gpio::{Output, Speed};
 use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG};
 use embassy_stm32::rng::Rng;
+use embassy_stm32::timer::low_level::TriggerSource;
 use embassy_stm32::wdg::IndependentWatchdog;
-use embedded_alloc::LlffHeap as Heap;
-use embassy_executor::Spawner;
 use embassy_stm32::{Config, gpio::Level};
-use embassy_stm32::gpio::{Output, Speed};
 use embassy_stm32::{bind_interrupts, rcc, rng};
 use embassy_time::{Duration, Timer};
+use embedded_alloc::LlffHeap as Heap;
 use heapless::Vec;
 use static_cell::StaticCell;
 
+use crate::drivers::stepper::step_counter::StepCounter;
+use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
@@ -156,7 +159,6 @@ async fn resolve_addr(
     Ok(SocketAddr::new((*ip).into(), port))
 }
 
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = Config::default();
@@ -170,7 +172,7 @@ async fn main(spawner: Spawner) {
 
     info!("Launching");
 
-    // create independent watchdog, 
+    // create independent watchdog,
     let mut watchdog = IndependentWatchdog::new(p.IWDG1, WATCHDOG_TIMEOUT_US);
     watchdog.unleash();
 
@@ -237,7 +239,11 @@ async fn main(spawner: Spawner) {
     info!("Network initialized");
 
     // Initialize Updater socket
-    let socket = TcpSocket::new(stack, UPD_TCP_RX_BUF.init([0; _]), UPD_TCP_TX_BUF.init([0; _]));
+    let socket = TcpSocket::new(
+        stack,
+        UPD_TCP_RX_BUF.init([0; _]),
+        UPD_TCP_TX_BUF.init([0; _]),
+    );
 
     // Initialize firmware manager
     let flash = Flash::new(p.FLASH, Irqs);
@@ -248,7 +254,11 @@ async fn main(spawner: Spawner) {
     spawner.spawn(firmware_manager_task(runner).unwrap());
 
     // Initizlize Nats socket
-    let socket = TcpSocket::new(stack, NATS_TCP_RX_BUF.init([0; _]), NATS_TCP_TX_BUF.init([0; _]));
+    let socket = TcpSocket::new(
+        stack,
+        NATS_TCP_RX_BUF.init([0; _]),
+        NATS_TCP_TX_BUF.init([0; _]),
+    );
 
     // resolve nats addr
     let socket_addr = loop {
@@ -272,26 +282,33 @@ async fn main(spawner: Spawner) {
     let dir = Output::new(p.PE7, Level::Low, Speed::Medium);
     let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
 
-    let mut stepper = Stepper::new(p.TIM2, step, dir, enable, STEPPS_PER_REV);
-    
+    let step_interface = StepInterface::new(p.TIM2, step);
+    // In the stm32 interconnection matrix TIM2 is ITR1 to TIM23
+    let step_counter = StepCounter::new(p.TIM23, TriggerSource::ITR1);
+    let mut stepper = Stepper::new(step_interface, step_counter, dir, enable, STEPPS_PER_REV);
+
     // LEDs on PE0..=PE4
     let mut led = Output::new(p.PE2, Level::Low, Speed::Low);
 
     #[derive(serde::Deserialize)]
     struct TestTarget {
-        v: f64
+        v: f64,
     }
 
-    client.subscribe(alloc::string::String::from("trex.testing.target"), &CH).await;
+    client
+        .subscribe(alloc::string::String::from("trex.testing.target"), &CH)
+        .await;
     loop {
         led.toggle();
         let nats_msg = client.receive().await;
         match minicbor_serde::from_slice::<TestTarget>(&nats_msg.data) {
             Ok(cmd) => {
+                defmt::info!("stepps before move: {}", stepper.get_steps());
                 stepper.set_speed(cmd.v);
                 Timer::after(Duration::from_secs(1)).await;
                 stepper.stop();
-            },
+                defmt::info!("stepps after move: {}", stepper.get_steps());
+            }
             Err(e) => defmt::warn!("could not decode cmd: {}", defmt::Debug2Format(&e)),
         }
     }

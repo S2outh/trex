@@ -20,6 +20,9 @@ embassy-boot-stm32.workspace = true
 defmt.workspace = true
 blake3.workspace = true
 
+serde.workspace = true
+minicbor-serde.workspace = true
+
 defmt-rtt = "1.3"
 
 panic-reset = { version = "0.1.1" }
@@ -35,7 +38,3 @@ embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git" }
 portable-atomic = "1.15.0"
 heapless = "0.9.3"
-
-erased-serde = { version = "0.4.10", default-features = false, features = ["alloc"] }
-serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }
-minicbor-serde = { version = "0.6.2", features = ["alloc"] }

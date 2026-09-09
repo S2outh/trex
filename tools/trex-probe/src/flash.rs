@@ -1,6 +1,8 @@
-
 use anyhow::{Context, Result, bail};
-use object::{Endianness, Object, ObjectSegment, read::elf::{ElfFile32, ProgramHeader}};
+use object::{
+    Endianness, Object, ObjectSegment,
+    read::elf::{ElfFile32, ProgramHeader},
+};
 
 use crate::FlashConf;
 
@@ -28,11 +30,7 @@ pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     }
 
     // Base is the lowest physical address of any segment
-    let base = segments
-        .iter()
-        .map(|(lma, _)| *lma)
-        .min()
-        .unwrap();
+    let base = segments.iter().map(|(lma, _)| *lma).min().unwrap();
     // End is the highest end address (lma + length) of any segment
     let end = segments
         .iter()
@@ -58,12 +56,20 @@ pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
 pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result<()> {
     if let Some(conf_base) = flash_conf.base {
         if base != conf_base {
-            bail!("Binary base address missmatch: was {}, expected {}", base, conf_base)
+            bail!(
+                "Binary base address missmatch: was {}, expected {}",
+                base,
+                conf_base
+            )
         }
     }
     if let Some(conf_max_size) = flash_conf.max_size {
         if size > conf_max_size as usize {
-            bail!("Binary size too large: was {}, expected max {}", size, conf_max_size)
+            bail!(
+                "Binary size too large: was {}, expected max {}",
+                size,
+                conf_max_size
+            )
         }
     }
     Ok(())

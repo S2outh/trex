@@ -26,7 +26,7 @@ fn main() -> ! {
     let config = BootLoaderConfig::from_linkerfile_blocking(&flash, &flash, &flash);
     let active_offset = config.active.offset();
     let bl = BootLoader::prepare::<_, _, _, FLASH_COPY_BUFFER_SIZE>(config);
-    
+
     defmt::info!("[BOOT] Sucessfull");
 
     // The watchdog will only be petted if the active partition works correctly
