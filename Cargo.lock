@@ -2464,7 +2464,7 @@ dependencies = [
  "portable-atomic",
  "serde",
  "static_cell",
- "trex-transport",
+ "trex-firmware-transport",
 ]
 
 [[package]]
@@ -2493,6 +2493,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trex-firmware-transport"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "num_enum",
+]
+
+[[package]]
 name = "trex-probe"
 version = "0.1.0"
 dependencies = [
@@ -2504,15 +2512,7 @@ dependencies = [
  "indicatif",
  "object",
  "tokio",
- "trex-transport",
-]
-
-[[package]]
-name = "trex-transport"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "num_enum",
+ "trex-firmware-transport",
 ]
 
 [[package]]

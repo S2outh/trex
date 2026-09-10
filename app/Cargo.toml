@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-trex-transport.path = "../crates/trex-transport"
+trex-firmware-transport.path = "../crates/trex-firmware-transport"
 
 embassy-stm32.workspace = true
 embassy-sync.workspace = true

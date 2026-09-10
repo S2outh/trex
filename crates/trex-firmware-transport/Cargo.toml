@@ -1,5 +1,5 @@
 [package]
-name = "trex-transport"
+name = "trex-firmware-transport"
 version.workspace = true
 edition.workspace = true
 

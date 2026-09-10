@@ -3,7 +3,7 @@ use embassy_futures::yield_now;
 use embassy_net::tcp::{self, TcpSocket};
 use embassy_stm32::flash::{Async, Flash, WRITE_SIZE};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
-use trex_transport::*;
+use trex_firmware_transport::*;
 
 type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<
     'a,

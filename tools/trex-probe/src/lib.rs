@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use trex_transport::*;
+use trex_firmware_transport::*;
 
 use anyhow::{Context, Result};
 use console::style;
