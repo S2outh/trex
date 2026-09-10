@@ -7,7 +7,7 @@ enum LogAction {
     Write(alloc::vec::Vec<u8>),
 }
 
-static LOG_CHANNEL: embassy_sync::channel::Channel<ThreadModeRawMutex, LogAction, 1024> = embassy_sync::channel::Channel::new();
+static LOG_CHANNEL: embassy_sync::channel::Channel<ThreadModeRawMutex, LogAction, 100> = embassy_sync::channel::Channel::new();
 
 #[defmt::global_logger]
 struct Logger;

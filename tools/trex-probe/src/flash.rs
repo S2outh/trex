@@ -1,10 +1,21 @@
+use trex_firmware_transport::*;
+
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+
 use anyhow::{Context, Result, bail};
 use object::{
     Endianness, Object, ObjectSegment,
     read::elf::{ElfFile32, ProgramHeader},
 };
+use console::style;
 
-use crate::FlashConf;
+use indicatif::{ProgressIterator, ProgressStyle};
+
+use crate::{FlashConf, NetConf};
+
+const PR_TEMPLATE: &str = "{spinner} {bar:60.green/blue} Sending Chunk: {pos}/{len} [{elapsed}]";
+const PR_CHARS: &str = "##-";
 
 pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     let file = ElfFile32::<Endianness>::parse(data)?;
@@ -72,5 +83,54 @@ pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result
             )
         }
     }
+    Ok(())
+}
+
+pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
+
+    let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
+
+    let size = object.len();
+    validate_object(base, size, flash_conf).context("ELF validation failed")?;
+
+    println!("{} Successfully validated image", style("[FLASH]").cyan());
+
+    let hash = blake3::hash(&object).into();
+
+    println!("{} Connecting to target...", style("[FLASH]").cyan());
+
+    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
+        .await
+        .context("could not connect to target")?;
+
+    println!("{} Sending firmware...", style("[FLASH]").cyan());
+
+    let progress_style = ProgressStyle::with_template(PR_TEMPLATE)
+        .unwrap()
+        .progress_chars(PR_CHARS);
+    for (i, chunk) in object
+        .chunks(CHUNK_SIZE)
+        .enumerate()
+        .progress_with_style(progress_style)
+    {
+        let offset = i * CHUNK_SIZE;
+        let size = chunk.len();
+        HeaderSerializer::new(async |a| tcp.write_all(a).await)
+            .write_header(Header::Chunk { offset, size })
+            .await
+            .context("could not send header")?;
+
+        tcp.write_all(chunk).await.context("could not send chunk")?;
+    }
+
+    println!("{} Applying firmware...", style("[FLASH]").cyan());
+
+    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+        .write_header(Header::Apply { size, hash })
+        .await
+        .context("could not send header")?;
+
+    println!("{} Done!", style("[FLASH]").cyan());
+
     Ok(())
 }

@@ -15,7 +15,10 @@ pub struct Cli {
     pub host: String,
 
     #[arg(long, short, default_value_t = 3000)]
-    pub port: u16,
+    pub firmware_port: u16,
+
+    #[arg(long, short, default_value_t = 3001)]
+    pub logger_port: u16,
 }
 
 #[derive(Subcommand)]
@@ -25,6 +28,8 @@ pub enum Commands {
     Run(FlashArgs),
     /// Flash the executable on the target
     Flash(FlashArgs),
+    /// Only attach the defmt logger
+    Attach(AttachArgs),
     /// Validate the current firmware on the target
     Validate,
     /// Reset the target
@@ -43,11 +48,18 @@ pub struct FlashArgs {
     pub max_size: Option<u64>,
 }
 
+#[derive(Args)]
+pub struct AttachArgs {
+    /// path to the executable
+    pub path: PathBuf,
+}
+
 impl From<&Cli> for NetConf {
     fn from(v: &Cli) -> Self {
         NetConf {
             host: v.host.clone(),
-            port: v.port,
+            firmware_port: v.firmware_port,
+            logger_port: v.logger_port,
         }
     }
 }

@@ -15,6 +15,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Run(args) => trex_probe::run(&net_conf, &args.into()).await,
         Commands::Flash(args) => trex_probe::flash(&net_conf, &args.into()).await,
+        Commands::Attach(args) => trex_probe::attach(&net_conf, args.path).await,
         Commands::Validate => trex_probe::validate(&net_conf).await,
         Commands::Reset => trex_probe::reset(&net_conf).await,
     }
