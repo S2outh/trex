@@ -1,14 +1,18 @@
-
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
-use defmt_decoder::{DecodeError, Frame, Locations, Table, log::{DefmtLoggerType, format::{Formatter, FormatterConfig, HostFormatter}}};
+use defmt_decoder::{
+    DecodeError, Frame, Locations, Table,
+    log::{
+        DefmtLoggerType,
+        format::{Formatter, FormatterConfig, HostFormatter},
+    },
+};
 use tokio::{io::AsyncReadExt, net::TcpStream};
 
 use crate::NetConf;
 
 pub async fn run(data: &[u8], net_conf: &NetConf) -> Result<()> {
-
     // defmt logger setup
     let table = Table::parse(&data)?.ok_or_else(|| anyhow!(".defmt data not found"))?;
     let locs = table.get_locations(&data)?;

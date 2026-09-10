@@ -28,7 +28,7 @@ use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
-use crate::logger::TcpEncoder;
+use crate::logger::TcpLogger;
 
 use panic_reset as _;
 
@@ -148,7 +148,7 @@ async fn net_task(mut runner: embassy_net::Runner<'static, EthDevice>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn logger_task(mut runner: TcpEncoder<'static>) -> ! {
+async fn logger_task(mut runner: TcpLogger<'static>) -> ! {
     runner.run().await
 }
 
@@ -261,7 +261,7 @@ async fn main(spawner: Spawner) {
     );
 
     // Initialize logger
-    let runner = TcpEncoder::new(socket, LOGGER_PORT).await;
+    let runner = TcpLogger::new(socket, LOGGER_PORT).await;
 
     // launch logger task
     spawner.spawn(logger_task(runner).unwrap());

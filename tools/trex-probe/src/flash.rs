@@ -4,11 +4,11 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
 use anyhow::{Context, Result, bail};
+use console::style;
 use object::{
     Endianness, Object, ObjectSegment,
     read::elf::{ElfFile32, ProgramHeader},
 };
-use console::style;
 
 use indicatif::{ProgressIterator, ProgressStyle};
 
@@ -87,7 +87,6 @@ pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result
 }
 
 pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
-
     let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
 
     let size = object.len();

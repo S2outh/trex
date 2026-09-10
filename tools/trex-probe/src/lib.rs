@@ -8,8 +8,8 @@ use trex_firmware_transport::*;
 use anyhow::{Context, Result};
 use console::style;
 
-mod flash;
 mod defmt_logger;
+mod flash;
 
 pub struct NetConf {
     pub host: String,
@@ -27,7 +27,7 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
     println!("{} Loading image", style("[RUN]").yellow());
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
-    
+
     println!("{} Successfully loaded image", style("[RUN]").yellow());
 
     flash::flash_elf(data.as_ref(), net_conf, flash_conf)
@@ -38,25 +38,28 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
 
     validate(net_conf).await.context("Validation failed")?;
 
-    defmt_logger::run(data.as_ref(), net_conf).await.context("defmt logger failed")
+    defmt_logger::run(data.as_ref(), net_conf)
+        .await
+        .context("defmt logger failed")
 }
 
 pub async fn attach(net_conf: &NetConf, path: PathBuf) -> Result<()> {
-
     println!("{} Loading image", style("[Attach]").yellow());
 
     let data = fs::read(path).context("Failed to load image")?;
-    
+
     println!("{} Successfully loaded image", style("[Attach]").yellow());
 
-    defmt_logger::run(data.as_ref(), net_conf).await.context("defmt logger failed")
+    defmt_logger::run(data.as_ref(), net_conf)
+        .await
+        .context("defmt logger failed")
 }
 
 pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
     println!("{} Loading image", style("[FLASH]").cyan());
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
-    
+
     println!("{} Successfully loaded image", style("[FLASH]").cyan());
 
     flash::flash_elf(data.as_ref(), net_conf, flash_conf).await

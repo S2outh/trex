@@ -1,20 +1,16 @@
+use core::cell::UnsafeCell;
+
 use embassy_net::tcp::{self, TcpSocket};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-
-enum LogAction {
-    Acquire,
-    Release,
-    Write(alloc::vec::Vec<u8>),
-}
-
-static LOG_CHANNEL: embassy_sync::channel::Channel<ThreadModeRawMutex, LogAction, 100> = embassy_sync::channel::Channel::new();
 
 #[defmt::global_logger]
 struct Logger;
 
+static ENCODER: TcpEncoder = TcpEncoder::new();
+
 unsafe impl defmt::Logger for Logger {
     fn acquire() {
-        let _ = LOG_CHANNEL.try_send(LogAction::Acquire);
+        ENCODER.acquire();
     }
 
     unsafe fn flush() {
@@ -22,34 +18,71 @@ unsafe impl defmt::Logger for Logger {
     }
 
     unsafe fn release() {
-        let _ = LOG_CHANNEL.try_send(LogAction::Release);
+        unsafe {
+            ENCODER.release();
+        }
     }
 
     unsafe fn write(bytes: &[u8]) {
-        let mut vec = alloc::vec![0; bytes.len()];
-        vec.copy_from_slice(bytes);
-        let _ = LOG_CHANNEL.try_send(LogAction::Write(vec));
+        unsafe {
+            ENCODER.write(bytes);
+        }
     }
 }
 
-pub struct TcpEncoder<'a> {
+static LOG_CHANNEL: embassy_sync::channel::Channel<ThreadModeRawMutex, alloc::vec::Vec<u8>, 64> =
+    embassy_sync::channel::Channel::new();
+
+struct TcpEncoder {
+    encoder: UnsafeCell<defmt::Encoder>,
+}
+unsafe impl Sync for TcpEncoder {}
+
+impl TcpEncoder {
+    const fn new() -> Self {
+        let encoder = UnsafeCell::new(defmt::Encoder::new());
+        Self { encoder }
+    }
+
+    fn acquire(&self) {
+        let mut vec = alloc::vec::Vec::new();
+        unsafe {
+            self.encoder.get().as_mut().unwrap().start_frame(|b| {
+                vec.extend_from_slice(b);
+            });
+        }
+        let _ = LOG_CHANNEL.try_send(vec);
+    }
+
+    unsafe fn release(&self) {
+        let mut vec = alloc::vec::Vec::new();
+        unsafe {
+            self.encoder.get().as_mut().unwrap().end_frame(|b| {
+                vec.extend_from_slice(b);
+            });
+        }
+        let _ = LOG_CHANNEL.try_send(vec);
+    }
+
+    unsafe fn write(&self, bytes: &[u8]) {
+        let mut vec = alloc::vec::Vec::new();
+        unsafe {
+            self.encoder.get().as_mut().unwrap().write(bytes, |b| {
+                vec.extend_from_slice(b);
+            });
+        }
+        let _ = LOG_CHANNEL.try_send(vec);
+    }
+}
+
+pub struct TcpLogger<'a> {
     socket: TcpSocket<'a>,
-    encoder: defmt::Encoder,
     port: u16,
 }
 
-impl<'a> TcpEncoder<'a> {
-    pub async fn new(
-        socket: TcpSocket<'a>,
-        port: u16,
-    ) -> Self {
-        let encoder = defmt::Encoder::new();
-
-        Self {
-            socket,
-            encoder,
-            port,
-        }
+impl<'a> TcpLogger<'a> {
+    pub async fn new(socket: TcpSocket<'a>, port: u16) -> Self {
+        Self { socket, port }
     }
 
     async fn write_buf(&mut self, buf: &[u8]) -> Result<(), tcp::Error> {
@@ -66,36 +99,10 @@ impl<'a> TcpEncoder<'a> {
 
     async fn run_connected(&mut self) {
         loop {
-            match LOG_CHANNEL.receive().await {
-                LogAction::Acquire => {
-                    let mut vec = alloc::vec::Vec::new();
-                    self.encoder.start_frame(|b| {
-                        vec.extend_from_slice(b);
-                    });
-                    if let Err(_) = self.write_buf(&vec).await {
-                        return;
-                    }
-                },
+            let vec = LOG_CHANNEL.receive().await;
 
-                LogAction::Release => {
-                    let mut vec = alloc::vec::Vec::new();
-                    self.encoder.end_frame(|b| {
-                        vec.extend_from_slice(b);
-                    });
-                    if let Err(_) = self.write_buf(&vec).await {
-                        return;
-                    }
-                },
-
-                LogAction::Write(bytes) => {
-                    let mut vec = alloc::vec::Vec::new();
-                    self.encoder.write(&bytes, |b| {
-                        vec.extend_from_slice(b);
-                    });
-                    if let Err(_) = self.write_buf(&vec).await {
-                        return;
-                    }
-                },
+            if let Err(_) = self.write_buf(&vec).await {
+                return;
             }
         }
     }
