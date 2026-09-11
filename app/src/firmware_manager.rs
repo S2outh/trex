@@ -12,15 +12,6 @@ type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<
 >;
 type MtxFlash<'a> = Mutex<NoopRawMutex, Flash<'a, Async>>;
 
-// In case of unexpected states this manager does not propagate errors,
-// but instead reset the application.
-macro_rules! reset {
-    () => {{
-        defmt::warn!("[FW MGR] Reset");
-        cortex_m::peripheral::SCB::sys_reset();
-    }};
-}
-
 pub struct FirmwareManagerStorage<'a> {
     flash: MtxFlash<'a>,
     magic: AlignedBuffer<WRITE_SIZE>,
@@ -148,9 +139,9 @@ impl<'a> FirmwareManager<'a> {
                     defmt::info!("[FW MGR] Switching to new firmware...");
 
                     let _ = self.updater.mark_updated().await;
-                    reset!()
+                    cortex_m::peripheral::SCB::sys_reset();
                 }
-                Header::Reset => reset!(),
+                Header::Reset => cortex_m::peripheral::SCB::sys_reset(),
                 Header::Invalid(t) => defmt::warn!("[FW MGR] Received invalid Header! [{}]", t),
             }
         }

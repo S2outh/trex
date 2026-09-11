@@ -170,7 +170,10 @@ impl<'a> TcpLogger<'a> {
 
     async fn run_connected(&mut self) {
         let mut buf = [0; 512];
-        defmt::warn!("Dropped frames: {}", &DROPPED_FRAMES.load(Ordering::Relaxed));
+        let dropped_frames = DROPPED_FRAMES.load(Ordering::Relaxed);
+        if dropped_frames > 0 {
+            defmt::warn!("Dropped frames: {}", dropped_frames);
+        }
         loop {
             let n = LOG_PIPE.read(&mut buf).await;
             if self.write_buf(&buf[..n]).await.is_err() {

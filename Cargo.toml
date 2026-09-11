@@ -27,8 +27,8 @@ defmt = "1.1"
 # Common
 blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
 
-serde = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
-minicbor-serde = { version = "0.7.1", features = ["alloc"] }
+serde = { version = "1.0.229", default-features = false, features = ["derive"] }
+minicbor-serde = { version = "0.7.1" }
 
 # Tools
 tokio = { version = "1.53.1", features = [ "rt-multi-thread", "macros" ] }

@@ -27,7 +27,6 @@ static_cell = { version = "2.1.1", features = ["nightly"] }
 
 embedded-storage-async = "0.4.1"
 embassy-embedded-hal = "0.6.0"
-embedded-alloc = { version = "0.7.0", default-features = false, features = ["llff"] }
 
 embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }
 

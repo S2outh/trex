@@ -19,7 +19,6 @@ use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::{Config, gpio::Level};
 use embassy_stm32::{bind_interrupts, rcc, rng};
 use embassy_time::{Duration, Timer};
-use embedded_alloc::LlffHeap as Heap;
 use heapless::Vec;
 use static_cell::StaticCell;
 
@@ -56,14 +55,6 @@ const FIRMWARE_UPDATE_PORT: u16 = 3000;
 // Storage setup
 static FIRMWARE_STORAGE: StaticCell<FirmwareManagerStorage> = StaticCell::new();
 
-// Heap setup
-const HEAP_KB: usize = 64;
-
-extern crate alloc;
-
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
-
 // Ethernet
 // queues for raw packets before and after processing
 static PACKET_QUEUE: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
@@ -91,13 +82,15 @@ const LOG_TCP_TX_BUF_SIZE: usize = 1024;
 static LOG_TCP_TX_BUF: StaticCell<[u8; LOG_TCP_TX_BUF_SIZE]> = StaticCell::new();
 
 // NATS
-static NATS_STORAGE: embassy_nats::Storage = embassy_nats::Storage::new();
+type NatsConf = embassy_nats::Heapless<32, 256, 512>;
+const NATS_NUM_SUBS: usize = 1;
+static NATS_STORAGE: StaticCell<embassy_nats::Storage<NatsConf>> = StaticCell::new();
 const NATS_ADDR: &str = "nats.lan";
 const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 
-static CH: embassy_nats::MsgChannel = embassy_nats::MsgChannel::new();
+static CH: embassy_nats::MsgChannel<NatsConf, NATS_NUM_SUBS> = embassy_nats::MsgChannel::new();
 
 // Devices
 const STEPPS_PER_REV: u32 = 12_000;
@@ -161,7 +154,7 @@ async fn firmware_manager_task(mut runner: FirmwareManager<'static>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn nats_task(mut runner: embassy_nats::Runner<'static, UserPwdAuthenticator>) -> ! {
+async fn nats_task(mut runner: embassy_nats::Runner<'static, NatsConf, UserPwdAuthenticator, NATS_NUM_SUBS>) -> ! {
     runner.run().await
 }
 
@@ -182,11 +175,6 @@ async fn main(spawner: Spawner) {
     let mut config = Config::default();
     config.rcc = get_rcc_config();
     let p = embassy_stm32::init(config);
-
-    // init global allocator
-    unsafe {
-        embedded_alloc::init!(HEAP, HEAP_KB * 1024);
-    }
 
     info!("Launching");
 
@@ -303,8 +291,9 @@ async fn main(spawner: Spawner) {
     };
 
     // nats connection
+    let nats_storage = NATS_STORAGE.init(embassy_nats::Storage::new());
     let (mut client, runner) =
-        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE);
+        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, nats_storage).unwrap();
 
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
@@ -328,8 +317,9 @@ async fn main(spawner: Spawner) {
     }
 
     client
-        .subscribe(alloc::string::String::from("trex.testing.target"), &CH)
-        .await;
+        .subscribe(heapless::String::try_from("trex.testing.target").unwrap(), &CH)
+        .await
+        .unwrap();
     loop {
         led.toggle();
         let nats_msg = client.receive().await;
