@@ -38,6 +38,8 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
 
     validate(net_conf).await.context("Validation failed")?;
 
+    println!("{}", style("----------------------------------").yellow());
+
     defmt_logger::run(data.as_ref(), net_conf)
         .await
         .context("defmt logger failed")
@@ -49,6 +51,7 @@ pub async fn attach(net_conf: &NetConf, path: PathBuf) -> Result<()> {
     let data = fs::read(path).context("Failed to load image")?;
 
     println!("{} Successfully loaded image", style("[Attach]").yellow());
+    println!("{}", style("----------------------------------").yellow());
 
     defmt_logger::run(data.as_ref(), net_conf)
         .await

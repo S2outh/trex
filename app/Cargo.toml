@@ -15,15 +15,13 @@ embassy-futures.workspace = true
 cortex-m.workspace = true
 cortex-m-rt.workspace = true
 
-embassy-boot-stm32.workspace = true
+embassy-boot-stm32 = { workspace = true, features = ["defmt"] }
 
 defmt.workspace = true
 blake3.workspace = true
 
 serde.workspace = true
 minicbor-serde.workspace = true
-
-panic-reset = { version = "0.1.1" }
 
 static_cell = { version = "2.1.1", features = ["nightly"] }
 
@@ -36,3 +34,4 @@ embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git" }
 portable-atomic = "1.15.0"
 heapless = "0.9.3"
+critical-section = "1.2.0"

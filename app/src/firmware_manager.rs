@@ -50,16 +50,16 @@ impl<'a> FirmwareManager<'a> {
         let config = FirmwareUpdaterConfig::from_linkerfile(&storage.flash, &storage.flash);
         let mut updater = FirmwareUpdater::new(config, &mut storage.magic.0);
 
-        let validated = if let State::Swap = updater.get_state().await.unwrap_or_else(|_| reset!())
-        {
+        let state = updater.get_state().await.unwrap();
+        let validated = if let State::Swap = state {
             false
         } else {
             true
         };
 
         defmt::info!(
-            "[FW MGR] Initializing firmware updater. validated: {}",
-            validated
+            "[FW MGR] Initializing firmware manager. State: {}",
+            state
         );
 
         Self {
@@ -76,17 +76,16 @@ impl<'a> FirmwareManager<'a> {
             self.updater
                 .mark_booted()
                 .await
-                .unwrap_or_else(|_| reset!())
+                .unwrap()
         }
     }
-    async fn read_buf(&mut self, buf: &mut [u8]) -> Result<(), tcp::Error> {
-        let mut pos = 0;
-        while pos < buf.len() {
-            let bytes_read = self.socket.read(&mut buf[pos..]).await?;
+    async fn read_buf(&mut self, mut buf: &mut [u8]) -> Result<(), tcp::Error> {
+        while !buf.is_empty() {
+            let bytes_read = self.socket.read(buf).await?;
+            buf = &mut buf[bytes_read..];
             if bytes_read == 0 {
                 return Err(tcp::Error::ConnectionReset);
             }
-            pos += bytes_read;
             // Yield here to not block in case of large blocks of data
             yield_now().await;
         }
@@ -110,7 +109,7 @@ impl<'a> FirmwareManager<'a> {
                     );
 
                     let mut chunk = AlignedBuffer([0; CHUNK_SIZE]);
-                    if let Err(_) = self.read_buf(&mut chunk.as_mut()[..size]).await {
+                    if self.read_buf(&mut chunk.as_mut()[..size]).await.is_err() {
                         return;
                     };
 
@@ -163,7 +162,7 @@ impl<'a> FirmwareManager<'a> {
     pub async fn run(&mut self) -> ! {
         loop {
             defmt::info!("[FW MGR] Waiting for connections...");
-            if let Err(_) = self.socket.accept(self.port).await {
+            if self.socket.accept(self.port).await.is_err() {
                 self.disconnect().await;
                 continue;
             }

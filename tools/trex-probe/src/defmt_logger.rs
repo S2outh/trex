@@ -26,7 +26,7 @@ pub async fn run(data: &[u8], net_conf: &NetConf) -> Result<()> {
 
     // logger config
     let logger_type = DefmtLoggerType::Stdout;
-    let formatter_config = FormatterConfig::default();
+    let formatter_config = FormatterConfig::default().with_timestamp();
     let host_formatter_config = FormatterConfig::default();
 
     let formatter = Formatter::new(formatter_config);

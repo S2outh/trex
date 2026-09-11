@@ -26,6 +26,7 @@
         rust-analyzer-nightly = fpkgs.rust-analyzer;
         rust-toolchain = fpkgs.combine [
           profile.rustc
+          profile.miri
           profile.rust-src
           profile.cargo
           profile.rustfmt
@@ -33,6 +34,22 @@
           profile.llvm-tools
           std-lib.rust-std
         ];
+        trex-probe = 
+        (inputs.naersk.lib.${system}.override {
+          cargo = rust-toolchain;
+          rustc = rust-toolchain;
+        }).buildPackage {
+          src = ./.;
+          cargoBuildOptions = a: a ++ ["-p trex-probe" "--target=$(rustc -vV | grep host | cut -d ' ' -f 2)"];
+        };
+        trex-cli = 
+        (inputs.naersk.lib.${system}.override {
+          cargo = rust-toolchain;
+          rustc = rust-toolchain;
+        }).buildPackage {
+          src = ./.;
+          cargoBuildOptions = a: a ++ ["-p trex-cli" "--target=$(rustc -vV | grep host | cut -d ' ' -f 2)"];
+        };
       in {
         devShells.default =
         pkgs.mkShell {
@@ -46,6 +63,14 @@
             cargo-show-asm
             cargo-binutils
 
+            # utilities for shell scripts
+            jq
+            ripgrep
+
+            # local tools
+            trex-probe
+            trex-cli
+
             # for flashing
             probe-rs-tools
           ];
@@ -53,17 +78,6 @@
           # set the rust src for rust_analyzer
           RUST_SRC_PATH = "${rust-toolchain}/lib/rustlib/src/rust/library";
           # set default defmt log level
-          DEFMT_LOG = "info";
-        };
-        packages.default = 
-        (inputs.naersk.lib.${system}.override {
-          cargo = rust-toolchain;
-          rustc = rust-toolchain;
-        }).buildPackage {
-          src = ./.;
-          FW_VERSION = builtins.getEnv "FW_VERSION";
-          FW_HASH    = builtins.getEnv "FW_HASH";
-
           DEFMT_LOG = "info";
         };
       };

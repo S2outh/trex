@@ -14,8 +14,8 @@ use indicatif::{ProgressIterator, ProgressStyle};
 
 use crate::{FlashConf, NetConf};
 
-const PR_TEMPLATE: &str = "{spinner} {bar:60.green/blue} Sending Chunk: {pos}/{len} [{elapsed}]";
-const PR_CHARS: &str = "##-";
+const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
+const PR_CHARS: &str = "=>-";
 
 pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     let file = ElfFile32::<Endianness>::parse(data)?;
@@ -104,7 +104,7 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf) -
 
     println!("{} Sending firmware...", style("[FLASH]").cyan());
 
-    let progress_style = ProgressStyle::with_template(PR_TEMPLATE)
+    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
         .unwrap()
         .progress_chars(PR_CHARS);
     for (i, chunk) in object

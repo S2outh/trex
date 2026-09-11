@@ -13,5 +13,3 @@ cortex-m-rt.workspace = true
 embassy-boot-stm32.workspace = true
 
 defmt.workspace = true
-
-defmt-rtt = "1.3"

@@ -3,8 +3,6 @@
 
 use core::cell::RefCell;
 
-use defmt_rtt as _;
-
 use cortex_m_rt::{entry, exception};
 use embassy_boot_stm32::{BootLoader, BootLoaderConfig};
 use embassy_stm32::flash::{BANK1_REGION, Flash};
@@ -21,13 +19,9 @@ fn main() -> ! {
     let layout = Flash::new_blocking(p.FLASH).into_blocking_regions();
     let flash = Mutex::new(RefCell::new(layout.bank1_region));
 
-    defmt::info!("[BOOT] Loading firmware...");
-
     let config = BootLoaderConfig::from_linkerfile_blocking(&flash, &flash, &flash);
     let active_offset = config.active.offset();
     let bl = BootLoader::prepare::<_, _, _, FLASH_COPY_BUFFER_SIZE>(config);
-
-    defmt::info!("[BOOT] Sucessfull");
 
     // The watchdog will only be petted if the active partition works correctly
     let mut watchdog = IndependentWatchdog::new(p.IWDG1, WATCHDOG_TIMEOUT_US);

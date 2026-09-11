@@ -3,7 +3,7 @@
 
 use core::net::{Ipv4Addr, SocketAddr};
 
-use defmt::*;
+use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_nats::UserPwdAuthenticator;
 use embassy_net::dns::DnsQueryType;
@@ -30,7 +30,10 @@ use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
 use crate::logger::TcpLogger;
 
-use panic_reset as _;
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    cortex_m::peripheral::SCB::sys_reset();
+}
 
 mod drivers;
 mod firmware_manager;
@@ -65,7 +68,7 @@ static HEAP: Heap = Heap::empty();
 // queues for raw packets before and after processing
 static PACKET_QUEUE: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
 // resources to hold the sockets used by the net driver.
-// One for DHCP, one for DNS, one for the NTP UDP socket and one for the NATS TCP socket
+// One for DHCP/DNS, One for Flashing, one for Logging and one for NATS
 static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
 
 // buffer sizes for tcp data before and after processing
@@ -261,7 +264,7 @@ async fn main(spawner: Spawner) {
     );
 
     // Initialize logger
-    let runner = TcpLogger::new(socket, LOGGER_PORT).await;
+    let runner = TcpLogger::new(socket, LOGGER_PORT);
 
     // launch logger task
     spawner.spawn(logger_task(runner).unwrap());
@@ -316,7 +319,8 @@ async fn main(spawner: Spawner) {
     let mut stepper = Stepper::new(step_interface, step_counter, dir, enable, STEPPS_PER_REV);
 
     // LEDs on PE0..=PE4
-    let mut led = Output::new(p.PE2, Level::Low, Speed::Low);
+    // let mut blue_led = Output::new(p.PE2, Level::Low, Speed::Low);
+    let mut led = Output::new(p.PE0, Level::Low, Speed::Low);
 
     #[derive(serde::Deserialize)]
     struct TestTarget {

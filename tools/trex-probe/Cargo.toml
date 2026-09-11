@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 trex-firmware-transport.path = "../../crates/trex-firmware-transport"
 
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-util", "time", "net"] }
 
 blake3.workspace = true
 
