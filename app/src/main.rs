@@ -84,7 +84,7 @@ static LOG_TCP_TX_BUF: StaticCell<[u8; LOG_TCP_TX_BUF_SIZE]> = StaticCell::new()
 // NATS
 type NatsConf = embassy_nats::Heapless<32, 256, 470>;
 const NATS_NUM_SUBS: usize = 1;
-static NATS_STORAGE: StaticCell<embassy_nats::Storage<NatsConf>> = StaticCell::new();
+static NATS_STORAGE: embassy_nats::Storage<NatsConf> = embassy_nats::Storage::new();
 const NATS_ADDR: &str = "nats.lan";
 const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
@@ -291,9 +291,8 @@ async fn main(spawner: Spawner) {
     };
 
     // nats connection
-    let nats_storage = NATS_STORAGE.init(embassy_nats::Storage::new());
     let (mut client, runner) =
-        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, nats_storage).unwrap();
+        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE).unwrap();
 
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
