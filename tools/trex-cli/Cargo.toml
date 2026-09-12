@@ -6,8 +6,8 @@ edition.workspace = true
 [dependencies]
 tokio.workspace = true
 
-serde.workspace = true
-minicbor-serde.workspace = true
+serde = { workspace = true, features = [ "std" ] }
+minicbor-serde = { workspace = true, features = [ "std" ] }
 
 clap.workspace = true
 anyhow.workspace = true

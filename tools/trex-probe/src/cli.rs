@@ -19,6 +19,9 @@ pub struct Cli {
 
     #[arg(long, short, default_value_t = 3001)]
     pub logger_port: u16,
+
+    #[arg(long, short, default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]

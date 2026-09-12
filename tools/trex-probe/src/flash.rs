@@ -86,23 +86,23 @@ pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result
     Ok(())
 }
 
-pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
+pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
     let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
 
     let size = object.len();
     validate_object(base, size, flash_conf).context("ELF validation failed")?;
 
-    println!("{} Successfully validated image", style("[FLASH]").cyan());
+    vprintln!(v, "{} Successfully validated image", style("[FLASH]").cyan());
 
     let hash = blake3::hash(&object).into();
 
-    println!("{} Connecting to target...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
 
-    println!("{} Sending firmware...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
 
     let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
         .unwrap()
@@ -122,14 +122,14 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf) -
         tcp.write_all(chunk).await.context("could not send chunk")?;
     }
 
-    println!("{} Applying firmware...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Applying firmware...", style("[FLASH]").cyan());
 
     HeaderSerializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Apply { size, hash })
         .await
         .context("could not send header")?;
 
-    println!("{} Done!", style("[FLASH]").cyan());
+    vprintln!(v, "{} Done!", style("[FLASH]").cyan());
 
     Ok(())
 }

@@ -8,6 +8,17 @@ use trex_firmware_transport::*;
 use anyhow::{Context, Result};
 use console::style;
 
+#[macro_use]
+mod helpers {
+    macro_rules! vprintln {
+        ($verbose: expr, $($r:tt)*) => {
+            if $verbose {
+                println!($($r)*);
+            }
+        };
+    }
+}
+
 mod defmt_logger;
 mod flash;
 
@@ -23,59 +34,61 @@ pub struct FlashConf {
     pub max_size: Option<u64>,
 }
 
-pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
-    println!("{} Loading image", style("[RUN]").yellow());
+pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Loading image", style("[RUN]").yellow());
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
 
-    println!("{} Successfully loaded image", style("[RUN]").yellow());
+    vprintln!(v, "{} Successfully loaded image", style("[RUN]").yellow());
 
-    flash::flash_elf(data.as_ref(), net_conf, flash_conf)
+    flash::flash_elf(data.as_ref(), net_conf, flash_conf, v)
         .await
         .context("Failed to flash")?;
 
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    validate(net_conf).await.context("Validation failed")?;
+    validate(net_conf, v).await.context("Validation failed")?;
 
-    println!("{}", style("----------------------------------").yellow());
+    vprintln!(v, "{} Launching defmt logger...", style("[RUN]").yellow());
+    vprintln!(v, "{}", style("----------------------------------").yellow());
 
     defmt_logger::run(data.as_ref(), net_conf)
         .await
         .context("defmt logger failed")
 }
 
-pub async fn attach(net_conf: &NetConf, path: PathBuf) -> Result<()> {
-    println!("{} Loading image", style("[Attach]").yellow());
+pub async fn attach(net_conf: &NetConf, path: PathBuf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Loading image", style("[Attach]").yellow());
 
     let data = fs::read(path).context("Failed to load image")?;
 
-    println!("{} Successfully loaded image", style("[Attach]").yellow());
-    println!("{}", style("----------------------------------").yellow());
+    vprintln!(v, "{} Successfully loaded image", style("[Attach]").yellow());
+    vprintln!(v, "{} Launching defmt logger...", style("[Attach]").yellow());
+    vprintln!(v, "{}", style("----------------------------------").yellow());
 
     defmt_logger::run(data.as_ref(), net_conf)
         .await
         .context("defmt logger failed")
 }
 
-pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf) -> Result<()> {
-    println!("{} Loading image", style("[FLASH]").cyan());
+pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Loading image", style("[FLASH]").cyan());
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
 
-    println!("{} Successfully loaded image", style("[FLASH]").cyan());
+    vprintln!(v, "{} Successfully loaded image", style("[FLASH]").cyan());
 
-    flash::flash_elf(data.as_ref(), net_conf, flash_conf).await
+    flash::flash_elf(data.as_ref(), net_conf, flash_conf, v).await
 }
 
-pub async fn validate(net_conf: &NetConf) -> Result<()> {
-    println!("{} Connecting to target...", style("[VALIDATE]").green());
+pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
 
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
 
-    println!(
+    vprintln!(v, 
         "{} Sending validation request...",
         style("[VALIDATE]").green()
     );
@@ -85,26 +98,26 @@ pub async fn validate(net_conf: &NetConf) -> Result<()> {
         .await
         .context("could not send header")?;
 
-    println!("{} Done!", style("[VALIDATE]").green());
+    vprintln!(v, "{} Done!", style("[VALIDATE]").green());
 
     Ok(())
 }
 
-pub async fn reset(net_conf: &NetConf) -> Result<()> {
-    println!("{} Connecting to target...", style("[RESET]").red());
+pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Connecting to target...", style("[RESET]").red());
 
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
 
-    println!("{} Sending reset request...", style("[RESET]").red());
+    vprintln!(v, "{} Sending reset request...", style("[RESET]").red());
 
     HeaderSerializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Reset)
         .await
         .context("could not send header")?;
 
-    println!("{} Done!", style("[RESET]").red());
+    vprintln!(v, "{} Done!", style("[RESET]").red());
 
     Ok(())
 }
