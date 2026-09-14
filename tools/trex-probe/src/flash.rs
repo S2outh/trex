@@ -17,7 +17,7 @@ use crate::{FlashConf, NetConf};
 const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
 const PR_CHARS: &str = "=>-";
 
-pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
+fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     let file = ElfFile32::<Endianness>::parse(data)?;
     let endian = file.endian();
 
@@ -64,7 +64,7 @@ pub fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     Ok((base, out))
 }
 
-pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result<()> {
+fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result<()> {
     if let Some(conf_base) = flash_conf.base {
         if base != conf_base {
             bail!(
@@ -86,10 +86,28 @@ pub fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result
     Ok(())
 }
 
+pub fn print_size(elf: &[u8]) -> Result<()> {
+    let (_, object) = elf_objectcopy(elf).context("Failed to load image")?;
+
+    let size = object.len();
+    println!(
+        "{} Size of binary: {}",
+        style("[SIZE]").cyan(),
+        style(indicatif::HumanBytes(size as u64)).bold().red()
+    );
+    Ok(())
+}
+
 pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
     let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
 
     let size = object.len();
+    println!(
+        "{} Size of binary: {}",
+        style("[FLASH]").cyan(),
+        style(indicatif::HumanBytes(size as u64)).bold().red()
+    );
+
     validate_object(base, size, flash_conf).context("ELF validation failed")?;
 
     vprintln!(v, "{} Successfully validated image", style("[FLASH]").cyan());

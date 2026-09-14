@@ -17,6 +17,7 @@ async fn main() -> Result<()> {
         Commands::Run(args) => trex_probe::run(&net_conf, &args.into(), v).await,
         Commands::Flash(args) => trex_probe::flash(&net_conf, &args.into(), v).await,
         Commands::Attach(args) => trex_probe::attach(&net_conf, args.path, v).await,
+        Commands::Size(args) => trex_probe::size(args.path, v).await,
         Commands::Validate => trex_probe::validate(&net_conf, v).await,
         Commands::Reset => trex_probe::reset(&net_conf, v).await,
     }

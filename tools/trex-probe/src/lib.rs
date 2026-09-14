@@ -81,6 +81,16 @@ pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Resul
     flash::flash_elf(data.as_ref(), net_conf, flash_conf, v).await
 }
 
+pub async fn size(path: PathBuf, v: bool) -> Result<()> {
+    vprintln!(v, "{} Loading image", style("[SIZE]").cyan());
+
+    let data = fs::read(path).context("Failed to load image")?;
+
+    vprintln!(v, "{} Successfully loaded image", style("[SIZE]").cyan());
+
+    flash::print_size(data.as_ref())
+}
+
 pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
 

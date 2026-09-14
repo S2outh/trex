@@ -32,7 +32,9 @@ pub enum Commands {
     /// Flash the executable on the target
     Flash(FlashArgs),
     /// Only attach the defmt logger
-    Attach(AttachArgs),
+    Attach(FileArgs),
+    /// Get the actual flashed size of the binary
+    Size(FileArgs),
     /// Validate the current firmware on the target
     Validate,
     /// Reset the target
@@ -52,7 +54,7 @@ pub struct FlashArgs {
 }
 
 #[derive(Args)]
-pub struct AttachArgs {
+pub struct FileArgs {
     /// path to the executable
     pub path: PathBuf,
 }
