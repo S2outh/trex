@@ -1,5 +1,6 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, time::Duration};
 
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
@@ -33,6 +34,12 @@ pub struct FlashConf {
     pub base: Option<u64>,
     pub max_size: Option<u64>,
 }
+
+const SP_TEMPLATE: &str = "{spinner} Connecting to host...";
+
+const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
+const PR_CHARS: &str = "=>-";
+
 
 pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Loading image", style("[RUN]").yellow());
@@ -94,9 +101,13 @@ pub async fn size(path: PathBuf, v: bool) -> Result<()> {
 pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
 
+    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[VALIDATE]").green(), SP_TEMPLATE)).unwrap();
+    let spinner = ProgressBar::new_spinner().with_style(progress_style);
+    spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
+    spinner.finish();
 
     vprintln!(v, 
         "{} Sending validation request...",
@@ -116,9 +127,13 @@ pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
 pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[RESET]").red());
 
+    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[RESET]").red(), SP_TEMPLATE)).unwrap();
+    let spinner = ProgressBar::new_spinner().with_style(progress_style);
+    spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
+    spinner.finish();
 
     vprintln!(v, "{} Sending reset request...", style("[RESET]").red());
 

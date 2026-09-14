@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use trex_firmware_transport::*;
 
 use tokio::io::AsyncWriteExt;
@@ -10,12 +12,9 @@ use object::{
     read::elf::{ElfFile32, ProgramHeader},
 };
 
-use indicatif::{ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 
-use crate::{FlashConf, NetConf};
-
-const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
-const PR_CHARS: &str = "=>-";
+use crate::{FlashConf, NetConf, PR_CHARS, PR_TEMPLATE, SP_TEMPLATE};
 
 fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     let file = ElfFile32::<Endianness>::parse(data)?;
@@ -93,7 +92,7 @@ pub fn print_size(elf: &[u8]) -> Result<()> {
     println!(
         "{} Size of binary: {}",
         style("[SIZE]").cyan(),
-        style(indicatif::HumanBytes(size as u64)).bold().red()
+        style(indicatif::DecimalBytes(size as u64)).bold().red()
     );
     Ok(())
 }
@@ -105,7 +104,7 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v
     println!(
         "{} Size of binary: {}",
         style("[FLASH]").cyan(),
-        style(indicatif::HumanBytes(size as u64)).bold().red()
+        style(indicatif::DecimalBytes(size as u64)).bold().red()
     );
 
     validate_object(base, size, flash_conf).context("ELF validation failed")?;
@@ -116,9 +115,13 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v
 
     vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 
+    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), SP_TEMPLATE)).unwrap();
+    let spinner = ProgressBar::new_spinner().with_style(progress_style);
+    spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
+    spinner.finish();
 
     vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
 
