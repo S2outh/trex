@@ -82,7 +82,7 @@ const LOG_TCP_TX_BUF_SIZE: usize = 1024;
 static LOG_TCP_TX_BUF: StaticCell<[u8; LOG_TCP_TX_BUF_SIZE]> = StaticCell::new();
 
 // NATS
-type NatsConf = embassy_nats::Heapless<32, 256, 470>;
+type NatsConf = embassy_nats::Heapless<32, 256>;
 const NATS_NUM_SUBS: usize = 1;
 static NATS_STORAGE: embassy_nats::Storage<NatsConf> = embassy_nats::Storage::new();
 const NATS_ADDR: &str = "nats.lan";
