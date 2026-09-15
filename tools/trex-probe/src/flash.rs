@@ -90,9 +90,10 @@ pub fn print_size(elf: &[u8]) -> Result<()> {
 
     let size = object.len();
     println!(
-        "{} Size of binary: {}",
+        "{} Size of binary: {} {}",
         style("[SIZE]").cyan(),
-        style(indicatif::DecimalBytes(size as u64)).bold().red()
+        style(indicatif::HumanBytes(size as u64)).bold().red(),
+        style(&format!("({})", indicatif::DecimalBytes(size as u64))).dim(),
     );
     Ok(())
 }
@@ -102,9 +103,10 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v
 
     let size = object.len();
     println!(
-        "{} Size of binary: {}",
+        "{} Size of binary: {} {}",
         style("[FLASH]").cyan(),
-        style(indicatif::DecimalBytes(size as u64)).bold().red()
+        style(indicatif::HumanBytes(size as u64)).bold().red(),
+        style(&format!("({})", indicatif::DecimalBytes(size as u64))).dim(),
     );
 
     validate_object(base, size, flash_conf).context("ELF validation failed")?;

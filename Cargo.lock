@@ -894,13 +894,14 @@ dependencies = [
 [[package]]
 name = "embassy-nats"
 version = "1.0.0"
-source = "git+https://github.com/S2outh/embassy-nats.git#32aa176f0029565fda0b1b4f620a5c2f5173cdb3"
+source = "git+https://github.com/S2outh/embassy-nats.git#86103bec18eb5c9c526782c9810abc1566c3ed99"
 dependencies = [
  "embassy-futures",
  "embassy-net",
  "embassy-sync",
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
+ "portable-atomic",
  "serde",
  "serde-json-core",
  "thiserror",
