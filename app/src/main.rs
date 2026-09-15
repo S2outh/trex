@@ -90,7 +90,9 @@ const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 
-static CH: embassy_nats::MsgChannel<NatsConf, NATS_NUM_SUBS> = embassy_nats::MsgChannel::new();
+const NATS_MSG_CHANNEL_SIZE: usize = 10;
+static CH: embassy_nats::MsgChannel<NatsConf, NATS_MSG_CHANNEL_SIZE> =
+    embassy_nats::MsgChannel::new();
 
 // Devices
 const STEPPS_PER_REV: u32 = 12_000;
@@ -154,7 +156,9 @@ async fn firmware_manager_task(mut runner: FirmwareManager<'static>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn nats_task(mut runner: embassy_nats::Runner<'static, NatsConf, UserPwdAuthenticator, NATS_NUM_SUBS>) -> ! {
+async fn nats_task(
+    mut runner: embassy_nats::Runner<'static, NatsConf, UserPwdAuthenticator, NATS_NUM_SUBS>,
+) -> ! {
     runner.run().await
 }
 
@@ -292,7 +296,8 @@ async fn main(spawner: Spawner) {
 
     // nats connection
     let (mut client, runner) =
-        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE).unwrap();
+        embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE)
+            .unwrap();
 
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
@@ -316,7 +321,10 @@ async fn main(spawner: Spawner) {
     }
 
     client
-        .subscribe(heapless::String::try_from("trex.testing.target").unwrap(), &CH)
+        .subscribe(
+            heapless::String::try_from("trex.testing.target").unwrap(),
+            &CH,
+        )
         .await
         .unwrap();
     loop {

@@ -1,4 +1,7 @@
-use core::{cell::{Cell, UnsafeCell}, sync::atomic::Ordering};
+use core::{
+    cell::{Cell, UnsafeCell},
+    sync::atomic::Ordering,
+};
 
 use critical_section::RestoreState;
 use embassy_net::tcp::{self, TcpSocket};
@@ -86,7 +89,8 @@ impl TcpEncoder {
         self.frame_broken.set(false);
         unsafe {
             *self.restore.get() = restore;
-            self.encoder.get()
+            self.encoder
+                .get()
                 .as_mut_unchecked()
                 .start_frame(|b| self.ingress_bytes(b));
         }
@@ -94,7 +98,8 @@ impl TcpEncoder {
 
     unsafe fn write(&self, bytes: &[u8]) {
         unsafe {
-            self.encoder.get()
+            self.encoder
+                .get()
                 .as_mut_unchecked()
                 .write(bytes, |b| self.ingress_bytes(b));
         }
@@ -102,7 +107,8 @@ impl TcpEncoder {
 
     unsafe fn release(&self) {
         unsafe {
-            self.encoder.get()
+            self.encoder
+                .get()
                 .as_mut_unchecked()
                 .end_frame(|b| self.ingress_bytes(b));
         }
@@ -134,14 +140,11 @@ impl TcpEncoder {
         let ptr = self.ptr.get();
         if MAX_FRAME_SIZE - ptr < buf.len() {
             self.frame_broken.set(true);
-            return
+            return;
         }
 
         unsafe {
-            self.frame.get().as_mut_unchecked()
-                [ptr..]
-                [..buf.len()]
-                .copy_from_slice(buf);
+            self.frame.get().as_mut_unchecked()[ptr..][..buf.len()].copy_from_slice(buf);
         }
         self.ptr.set(ptr + buf.len());
     }

@@ -42,16 +42,9 @@ impl<'a> FirmwareManager<'a> {
         let mut updater = FirmwareUpdater::new(config, &mut storage.magic.0);
 
         let state = updater.get_state().await.unwrap();
-        let validated = if let State::Swap = state {
-            false
-        } else {
-            true
-        };
+        let validated = if let State::Swap = state { false } else { true };
 
-        defmt::info!(
-            "[FW MGR] Initializing firmware manager. State: {}",
-            state
-        );
+        defmt::info!("[FW MGR] Initializing firmware manager. State: {}", state);
 
         Self {
             updater,
@@ -64,10 +57,7 @@ impl<'a> FirmwareManager<'a> {
         if !self.validated {
             defmt::info!("[FW MGR] Firmware validated");
             self.validated = true;
-            self.updater
-                .mark_booted()
-                .await
-                .unwrap()
+            self.updater.mark_booted().await.unwrap()
         }
     }
     async fn read_buf(&mut self, mut buf: &mut [u8]) -> Result<(), tcp::Error> {

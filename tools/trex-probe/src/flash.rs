@@ -98,7 +98,12 @@ pub fn print_size(elf: &[u8]) -> Result<()> {
     Ok(())
 }
 
-pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
+pub async fn flash_elf(
+    elf: &[u8],
+    net_conf: &NetConf,
+    flash_conf: &FlashConf,
+    v: bool,
+) -> Result<()> {
     let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
 
     let size = object.len();
@@ -111,13 +116,19 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v
 
     validate_object(base, size, flash_conf).context("ELF validation failed")?;
 
-    vprintln!(v, "{} Successfully validated image", style("[FLASH]").cyan());
+    vprintln!(
+        v,
+        "{} Successfully validated image",
+        style("[FLASH]").cyan()
+    );
 
     let hash = blake3::hash(&object).into();
 
     vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 
-    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), SP_TEMPLATE)).unwrap();
+    let progress_style =
+        ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), SP_TEMPLATE))
+            .unwrap();
     let spinner = ProgressBar::new_spinner().with_style(progress_style);
     spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
@@ -127,9 +138,10 @@ pub async fn flash_elf(elf: &[u8], net_conf: &NetConf, flash_conf: &FlashConf, v
 
     vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
 
-    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
-        .unwrap()
-        .progress_chars(PR_CHARS);
+    let progress_style =
+        ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
+            .unwrap()
+            .progress_chars(PR_CHARS);
     for (i, chunk) in object
         .chunks(CHUNK_SIZE)
         .enumerate()

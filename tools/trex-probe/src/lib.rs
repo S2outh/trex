@@ -40,7 +40,6 @@ const SP_TEMPLATE: &str = "{spinner} Connecting to host...";
 const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
 const PR_CHARS: &str = "=>-";
 
-
 pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Loading image", style("[RUN]").yellow());
 
@@ -57,7 +56,11 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<
     validate(net_conf, v).await.context("Validation failed")?;
 
     vprintln!(v, "{} Launching defmt logger...", style("[RUN]").yellow());
-    vprintln!(v, "{}", style("----------------------------------").yellow());
+    vprintln!(
+        v,
+        "{}",
+        style("----------------------------------").yellow()
+    );
 
     defmt_logger::run(data.as_ref(), net_conf)
         .await
@@ -69,9 +72,21 @@ pub async fn attach(net_conf: &NetConf, path: PathBuf, v: bool) -> Result<()> {
 
     let data = fs::read(path).context("Failed to load image")?;
 
-    vprintln!(v, "{} Successfully loaded image", style("[Attach]").yellow());
-    vprintln!(v, "{} Launching defmt logger...", style("[Attach]").yellow());
-    vprintln!(v, "{}", style("----------------------------------").yellow());
+    vprintln!(
+        v,
+        "{} Successfully loaded image",
+        style("[Attach]").yellow()
+    );
+    vprintln!(
+        v,
+        "{} Launching defmt logger...",
+        style("[Attach]").yellow()
+    );
+    vprintln!(
+        v,
+        "{}",
+        style("----------------------------------").yellow()
+    );
 
     defmt_logger::run(data.as_ref(), net_conf)
         .await
@@ -101,7 +116,9 @@ pub async fn size(path: PathBuf, v: bool) -> Result<()> {
 pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
 
-    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[VALIDATE]").green(), SP_TEMPLATE)).unwrap();
+    let progress_style =
+        ProgressStyle::with_template(&format!("{} {}", style("[VALIDATE]").green(), SP_TEMPLATE))
+            .unwrap();
     let spinner = ProgressBar::new_spinner().with_style(progress_style);
     spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
@@ -109,7 +126,8 @@ pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
         .context("could not connect to target")?;
     spinner.finish();
 
-    vprintln!(v, 
+    vprintln!(
+        v,
         "{} Sending validation request...",
         style("[VALIDATE]").green()
     );
@@ -127,7 +145,9 @@ pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
 pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[RESET]").red());
 
-    let progress_style = ProgressStyle::with_template(&format!("{} {}", style("[RESET]").red(), SP_TEMPLATE)).unwrap();
+    let progress_style =
+        ProgressStyle::with_template(&format!("{} {}", style("[RESET]").red(), SP_TEMPLATE))
+            .unwrap();
     let spinner = ProgressBar::new_spinner().with_style(progress_style);
     spinner.enable_steady_tick(Duration::from_millis(100));
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))

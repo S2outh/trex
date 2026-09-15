@@ -62,6 +62,7 @@
             cargo-expand
             cargo-show-asm
             cargo-binutils
+            cargo-bloat
 
             # utilities for shell scripts
             jq
