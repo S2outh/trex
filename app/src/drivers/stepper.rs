@@ -3,7 +3,7 @@ use core::f64::consts;
 use embassy_stm32::{
     gpio::Output,
     time::hz,
-    timer::{GeneralInstance4Channel, GeneralInstance32bit4Channel, TimerChannel},
+    timer::{GeneralInstance4Channel, TimerChannel},
 };
 
 pub mod step_counter;
@@ -11,7 +11,7 @@ pub mod step_interface;
 
 use crate::drivers::stepper::{step_counter::StepCounter, step_interface::StepInterface};
 
-pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance32bit4Channel, C> {
+pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C> {
     step_interface: StepInterface<'d, T, C>,
     step_counter: StepCounter<'d, TC>,
     dir: Output<'d>,
@@ -20,7 +20,7 @@ pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance32bit4Chan
     angle_factor: f64,
 }
 
-impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance32bit4Channel, C: TimerChannel>
+impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChannel>
     Stepper<'d, T, TC, C>
 {
     pub fn new(
@@ -43,9 +43,8 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance32bit4Channel, C: TimerC
 
     pub fn set_speed(&mut self, speed: f64) {
         let frequency = speed * self.angle_factor;
+        self.step_interface.set_frequency(hz(frequency.abs() as u32));
         self.set_dir(frequency);
-        let frequency = frequency.abs();
-        self.step_interface.set_frequency(hz(frequency as u32));
         self.step_interface.start();
     }
 
@@ -53,15 +52,17 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance32bit4Channel, C: TimerC
         self.step_interface.stop();
     }
 
-    pub fn get_steps(&mut self) -> u32 {
-        self.step_counter.get()
+    pub fn get_pos(&mut self) -> f64 {
+        self.step_counter.get_pos() as f64 / self.angle_factor
     }
 
     fn set_dir(&mut self, dir: f64) {
         if dir > 0. {
             self.dir.set_high();
+            self.step_counter.set_dir(step_counter::Dir::Cw);
         } else {
             self.dir.set_low();
+            self.step_counter.set_dir(step_counter::Dir::Ccw);
         }
     }
 }

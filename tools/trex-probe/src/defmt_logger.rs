@@ -39,7 +39,7 @@ pub async fn run(data: &[u8], net_conf: &NetConf) -> Result<()> {
     let current_dir = std::env::current_dir()?;
 
     // open tcp stream
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
+    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.logger_port))
         .await
         .context("could not connect to target")?;
 

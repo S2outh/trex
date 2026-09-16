@@ -18,10 +18,13 @@ use embassy_stm32::timer::low_level::TriggerSource;
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::{Config, gpio::Level};
 use embassy_stm32::{bind_interrupts, rcc, rng};
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use heapless::Vec;
 use static_cell::StaticCell;
 
+
+use crate::control_loop::ControlLoop;
+use crate::control_loop::axis::Axis;
 use crate::drivers::stepper::step_counter::StepCounter;
 use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
@@ -34,6 +37,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     cortex_m::peripheral::SCB::sys_reset();
 }
 
+mod control_loop;
 mod drivers;
 mod firmware_manager;
 mod logger;
@@ -63,39 +67,29 @@ static PACKET_QUEUE: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
 static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
 
 // buffer sizes for tcp data before and after processing
-const NATS_TCP_RX_BUF_SIZE: usize = 1024;
-static NATS_TCP_RX_BUF: StaticCell<[u8; NATS_TCP_RX_BUF_SIZE]> = StaticCell::new();
+static NATS_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static NATS_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 
-const NATS_TCP_TX_BUF_SIZE: usize = 1024;
-static NATS_TCP_TX_BUF: StaticCell<[u8; NATS_TCP_TX_BUF_SIZE]> = StaticCell::new();
+static UPD_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static UPD_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 
-const UPD_TCP_RX_BUF_SIZE: usize = 1024;
-static UPD_TCP_RX_BUF: StaticCell<[u8; UPD_TCP_RX_BUF_SIZE]> = StaticCell::new();
-
-const UPD_TCP_TX_BUF_SIZE: usize = 1024;
-static UPD_TCP_TX_BUF: StaticCell<[u8; UPD_TCP_TX_BUF_SIZE]> = StaticCell::new();
-
-const LOG_TCP_RX_BUF_SIZE: usize = 1024;
-static LOG_TCP_RX_BUF: StaticCell<[u8; LOG_TCP_RX_BUF_SIZE]> = StaticCell::new();
-
-const LOG_TCP_TX_BUF_SIZE: usize = 1024;
-static LOG_TCP_TX_BUF: StaticCell<[u8; LOG_TCP_TX_BUF_SIZE]> = StaticCell::new();
+static LOG_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static LOG_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 
 // NATS
-type NatsConf = embassy_nats::Heapless<32, 256>;
-const NATS_NUM_SUBS: usize = 1;
-static NATS_STORAGE: embassy_nats::Storage<NatsConf> = embassy_nats::Storage::new();
+const NATS_MAX_TOPIC_SIZE: usize = 32;
+const NATS_MAX_MESSAGE_SIZE: usize = 256;
+type NatsCollections = embassy_nats::Heapless<NATS_MAX_TOPIC_SIZE, NATS_MAX_MESSAGE_SIZE>;
+static NATS_STORAGE: embassy_nats::Storage<NatsCollections> = embassy_nats::Storage::new();
 const NATS_ADDR: &str = "nats.lan";
 const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
-
-const NATS_MSG_CHANNEL_SIZE: usize = 10;
-static CH: embassy_nats::MsgChannel<NatsConf, NATS_MSG_CHANNEL_SIZE> =
-    embassy_nats::MsgChannel::new();
+const NATS_NUM_SUBS: usize = 1;
 
 // Devices
-const STEPPS_PER_REV: u32 = 12_000;
+const AZ_STEPPS_PER_REV: u32 = 12_000;
+const EL_STEPPS_PER_REV: u32 = 24_000;
 
 type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
@@ -141,6 +135,11 @@ async fn petter(mut watchdog: IndependentWatchdog<'static, IWDG1>) {
 }
 
 #[embassy_executor::task]
+pub async fn ctrl_task(mut control_loop: ControlLoop<'static>) -> ! {
+    control_loop.run().await
+}
+
+#[embassy_executor::task]
 async fn net_task(mut runner: embassy_net::Runner<'static, EthDevice>) -> ! {
     runner.run().await
 }
@@ -157,7 +156,7 @@ async fn firmware_manager_task(mut runner: FirmwareManager<'static>) -> ! {
 
 #[embassy_executor::task]
 async fn nats_task(
-    mut runner: embassy_nats::Runner<'static, NatsConf, UserPwdAuthenticator, NATS_NUM_SUBS>,
+    mut runner: embassy_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>,
 ) -> ! {
     runner.run().await
 }
@@ -295,13 +294,24 @@ async fn main(spawner: Spawner) {
     };
 
     // nats connection
-    let (mut client, runner) =
+    let (client, runner) =
         embassy_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE)
             .unwrap();
 
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
 
+    // Azimut stepper setup
+    let step = PulsePin::new(p.PB0);
+    let dir = Output::new(p.PE9, Level::Low, Speed::Medium);
+    let enable = Output::new(p.PE10, Level::Low, Speed::Medium);
+
+    let step_interface = StepInterface::new(p.TIM3, step);
+    // In the stm32 interconnection matrix TIM3 is ITR2 to TIM24
+    let step_counter = StepCounter::new(p.TIM24, TriggerSource::ITR2);
+    let azimut_stepper = Stepper::new(step_interface, step_counter, dir, enable, AZ_STEPPS_PER_REV);
+
+    // Elevation stepper setup
     let step = PulsePin::new(p.PA0);
     let dir = Output::new(p.PE7, Level::Low, Speed::Medium);
     let enable = Output::new(p.PE8, Level::Low, Speed::Medium);
@@ -309,38 +319,23 @@ async fn main(spawner: Spawner) {
     let step_interface = StepInterface::new(p.TIM2, step);
     // In the stm32 interconnection matrix TIM2 is ITR1 to TIM23
     let step_counter = StepCounter::new(p.TIM23, TriggerSource::ITR1);
-    let mut stepper = Stepper::new(step_interface, step_counter, dir, enable, STEPPS_PER_REV);
+    let elevation_stepper = Stepper::new(step_interface, step_counter, dir, enable, EL_STEPPS_PER_REV);
 
     // LEDs on PE0..=PE4
     // let mut blue_led = Output::new(p.PE2, Level::Low, Speed::Low);
-    let mut led = Output::new(p.PE0, Level::Low, Speed::Low);
+    let mut _red_led = Output::new(p.PE0, Level::High, Speed::Low);
 
-    #[derive(serde::Deserialize)]
-    struct TestTarget {
-        v: f64,
-    }
+    // setup control loop
+    let azimut = Axis::new(azimut_stepper);
+    let elevation = Axis::new(elevation_stepper);
 
-    client
-        .subscribe(
-            heapless::String::try_from("trex.testing.target").unwrap(),
-            &CH,
-        )
-        .await
-        .unwrap();
-    loop {
-        led.toggle();
-        let nats_msg = client.receive().await;
-        match minicbor_serde::from_slice::<TestTarget>(&nats_msg.data) {
-            Ok(cmd) => {
-                defmt::info!("stepps before move: {}", stepper.get_steps());
-                stepper.set_speed(cmd.v);
-                Timer::after(Duration::from_secs(1)).await;
-                stepper.stop();
-                defmt::info!("stepps after move: {}", stepper.get_steps());
-            }
-            Err(e) => defmt::warn!("could not decode cmd: {}", defmt::Debug2Format(&e)),
-        }
-    }
+    let control_loop = ControlLoop::new(
+        client,
+        azimut,
+        elevation,
+    ).await;
 
-    //core::future::pending::<()>().await;
+    spawner.spawn(ctrl_task(control_loop).unwrap());
+
+    core::future::pending::<()>().await;
 }

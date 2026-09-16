@@ -134,7 +134,7 @@ pub async fn flash_elf(
     let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
         .await
         .context("could not connect to target")?;
-    spinner.finish();
+    spinner.finish_and_clear();
 
     vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
 

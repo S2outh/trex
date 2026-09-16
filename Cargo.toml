@@ -24,6 +24,8 @@ cortex-m-rt = "0.7.6"
 
 defmt = "1.1"
 
+south-common = { git = "https://github.com/S2outh/south-common.git", features = ["serde"] }
+
 # Common
 blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
 
