@@ -10,11 +10,11 @@ pub mod step_counter;
 pub mod step_interface;
 
 use crate::drivers::stepper::{
-    step_counter::{CounterInstance, StepCounter},
+    step_counter::StepCounter,
     step_interface::StepInterface,
 };
 
-pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel + CounterInstance, C>
+pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C>
 {
     step_interface: StepInterface<'d, T, C>,
     step_counter: StepCounter<'d, TC>,
@@ -24,7 +24,7 @@ pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel +
     angle_factor: f64,
 }
 
-impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel + CounterInstance, C: TimerChannel>
+impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChannel>
     Stepper<'d, T, TC, C>
 {
     pub fn new(

@@ -4,7 +4,6 @@ use embassy_stm32::{
     Peri,
     interrupt::typelevel::{Binding, Handler},
     pac::timer::TimCore,
-    peripherals,
     timer::{
         GeneralInstance4Channel,
         low_level::{CountingMode, SlaveMode, Timer, TriggerSource},
@@ -12,6 +11,8 @@ use embassy_stm32::{
 };
 use portable_atomic::AtomicU16;
 
+
+// A direction enum representing clockwise and counterclockwise directions
 #[derive(PartialEq, Eq)]
 pub enum Dir {
     Cw,
@@ -27,11 +28,12 @@ impl Dir {
     }
 }
 
-pub struct InterruptHandler<T: CounterInstance> {
+// The interrupt handler for overflow counting (and handeling)
+pub struct InterruptHandler<T: GeneralInstance4Channel> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: CounterInstance + GeneralInstance4Channel> Handler<T::UpdateInterrupt>
+impl<T: GeneralInstance4Channel> Handler<T::UpdateInterrupt>
     for InterruptHandler<T>
 {
     unsafe fn on_interrupt() {
@@ -50,6 +52,7 @@ impl<T: CounterInstance + GeneralInstance4Channel> Handler<T::UpdateInterrupt>
     }
 }
 
+// The global (static) state of each timer peripheral acting as counter
 struct CounterState {
     overflows: AtomicU16,
 }
@@ -61,26 +64,19 @@ impl CounterState {
     }
 }
 
-pub trait CounterInstance {
-    #[allow(private_interfaces)]
+// Trait for each timer instance that can act as counter
+trait CounterInstance {
     fn state() -> &'static CounterState;
 }
 
-macro_rules! impl_counter_state {
-    ($type: ty) => {
-        impl CounterInstance for $type {
-            #[allow(private_interfaces)]
-            fn state() -> &'static CounterState {
-                static STATE: CounterState = CounterState::new();
-                &STATE
-            }
-        }
-    };
+impl<T: GeneralInstance4Channel> CounterInstance for T {
+    fn state() -> &'static CounterState {
+        static STATE: CounterState = CounterState::new();
+        &STATE
+    }
 }
 
-impl_counter_state!(peripherals::TIM23);
-impl_counter_state!(peripherals::TIM24);
-
+// actual public facing step counter interface
 pub struct StepCounter<'d, T: GeneralInstance4Channel> {
     inner: Timer<'d, T>,
     dir: Dir,
@@ -88,7 +84,7 @@ pub struct StepCounter<'d, T: GeneralInstance4Channel> {
     last_cnt: i32,
 }
 
-impl<'d, T: GeneralInstance4Channel + CounterInstance> StepCounter<'d, T> {
+impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
     pub fn new(
         tim: Peri<'d, T>,
         trigger: TriggerSource,
@@ -119,7 +115,7 @@ impl<'d, T: GeneralInstance4Channel + CounterInstance> StepCounter<'d, T> {
             last_cnt: 0,
         }
     }
-    // read the cnt register and update the position, resetting the cnt register
+    // read the cnt register and overflow counter and update the position
     fn update_pos(&mut self) {
         // wrapping these in a CS in order to mitigate potential issues
         // if overflow happens between the swap and the read
