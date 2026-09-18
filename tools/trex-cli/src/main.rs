@@ -3,8 +3,8 @@ use anyhow::Result;
 use clap::Parser;
 
 use south_common::chell::ChellDefinition;
-use south_common::types::trex::Command;
 use south_common::definitions::groundstation::trex as defs;
+use south_common::types::trex::Command;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

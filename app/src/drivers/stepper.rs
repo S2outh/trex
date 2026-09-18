@@ -9,9 +9,13 @@ use embassy_stm32::{
 pub mod step_counter;
 pub mod step_interface;
 
-use crate::drivers::stepper::{step_counter::StepCounter, step_interface::StepInterface};
+use crate::drivers::stepper::{
+    step_counter::{CounterInstance, StepCounter},
+    step_interface::StepInterface,
+};
 
-pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C> {
+pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel + CounterInstance, C>
+{
     step_interface: StepInterface<'d, T, C>,
     step_counter: StepCounter<'d, TC>,
     dir: Output<'d>,
@@ -20,7 +24,7 @@ pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, 
     angle_factor: f64,
 }
 
-impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChannel>
+impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel + CounterInstance, C: TimerChannel>
     Stepper<'d, T, TC, C>
 {
     pub fn new(
@@ -43,7 +47,8 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChanne
 
     pub fn set_speed(&mut self, speed: f64) {
         let frequency = speed * self.angle_factor;
-        self.step_interface.set_frequency(hz(frequency.abs() as u32));
+        self.step_interface
+            .set_frequency(hz(frequency.abs() as u32));
         self.set_dir(frequency);
         self.step_interface.start();
     }

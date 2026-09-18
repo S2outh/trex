@@ -12,7 +12,7 @@ use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
 use embassy_stm32::gpio::{Output, Speed};
-use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG};
+use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG, TIM23, TIM24};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::timer::low_level::TriggerSource;
 use embassy_stm32::wdg::IndependentWatchdog;
@@ -25,7 +25,7 @@ use static_cell::StaticCell;
 
 use crate::control_loop::ControlLoop;
 use crate::control_loop::axis::Axis;
-use crate::drivers::stepper::step_counter::StepCounter;
+use crate::drivers::stepper::step_counter::{self, StepCounter};
 use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
@@ -97,6 +97,8 @@ bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
     FLASH => flash::InterruptHandler;
     RNG => rng::InterruptHandler<RNG>;
+    TIM23 => step_counter::InterruptHandler<TIM23>;
+    TIM24 => step_counter::InterruptHandler<TIM24>;
 });
 
 fn get_rcc_config() -> rcc::Config {
@@ -308,7 +310,7 @@ async fn main(spawner: Spawner) {
 
     let step_interface = StepInterface::new(p.TIM3, step);
     // In the stm32 interconnection matrix TIM3 is ITR2 to TIM24
-    let step_counter = StepCounter::new(p.TIM24, TriggerSource::ITR2);
+    let step_counter = StepCounter::new(p.TIM24, TriggerSource::ITR2, Irqs);
     let azimut_stepper = Stepper::new(step_interface, step_counter, dir, enable, AZ_STEPPS_PER_REV);
 
     // Elevation stepper setup
@@ -318,8 +320,9 @@ async fn main(spawner: Spawner) {
 
     let step_interface = StepInterface::new(p.TIM2, step);
     // In the stm32 interconnection matrix TIM2 is ITR1 to TIM23
-    let step_counter = StepCounter::new(p.TIM23, TriggerSource::ITR1);
-    let elevation_stepper = Stepper::new(step_interface, step_counter, dir, enable, EL_STEPPS_PER_REV);
+    let step_counter = StepCounter::new(p.TIM23, TriggerSource::ITR1, Irqs);
+    let elevation_stepper =
+        Stepper::new(step_interface, step_counter, dir, enable, EL_STEPPS_PER_REV);
 
     // LEDs on PE0..=PE4
     // let mut blue_led = Output::new(p.PE2, Level::Low, Speed::Low);

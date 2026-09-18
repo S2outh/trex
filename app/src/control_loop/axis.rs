@@ -1,18 +1,18 @@
-
 use embassy_stm32::timer::{GeneralInstance4Channel, TimerChannel};
 
-use crate::drivers::stepper::Stepper;
+use crate::drivers::stepper::{Stepper, step_counter::CounterInstance};
 
 pub struct Axis<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C>
 where
     T: GeneralInstance4Channel,
-    TC: GeneralInstance4Channel,
+    TC: GeneralInstance4Channel + CounterInstance,
     C: TimerChannel,
 {
-    stepper: Stepper<'d, T, TC, C>
+    stepper: Stepper<'d, T, TC, C>,
 }
 
-impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C> Axis<'d, T, TC, C>
+impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel + CounterInstance, C>
+    Axis<'d, T, TC, C>
 where
     T: GeneralInstance4Channel,
     TC: GeneralInstance4Channel,
