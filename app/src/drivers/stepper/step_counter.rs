@@ -11,31 +11,14 @@ use embassy_stm32::{
 };
 use portable_atomic::AtomicU16;
 
-
-// A direction enum representing clockwise and counterclockwise directions
-#[derive(PartialEq, Eq)]
-pub enum Dir {
-    Cw,
-    Ccw,
-}
-
-impl Dir {
-    fn int(&self) -> i32 {
-        match self {
-            Dir::Cw => 1,
-            Dir::Ccw => -1,
-        }
-    }
-}
+use super::Dir;
 
 // The interrupt handler for overflow counting (and handeling)
 pub struct InterruptHandler<T: GeneralInstance4Channel> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: GeneralInstance4Channel> Handler<T::UpdateInterrupt>
-    for InterruptHandler<T>
-{
+impl<T: GeneralInstance4Channel> Handler<T::UpdateInterrupt> for InterruptHandler<T> {
     unsafe fn on_interrupt() {
         // SAFETY: T::regs() is this timers block, TimCore is the register subset
         // common to every type of timer, so this timer is guaranteed to have it
@@ -131,7 +114,8 @@ impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
     }
     pub fn get_pos(&mut self) -> i32 {
         self.update_pos();
-        self.pos
+        // actual pos is halved, as master counter is toggle
+        self.pos / 2
     }
     // since the counter internally does not track direction,
     pub fn set_dir(&mut self, dir: Dir) {

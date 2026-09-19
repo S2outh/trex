@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(clamp_magnitude)]
 
 use core::net::{Ipv4Addr, SocketAddr};
 
@@ -21,7 +22,6 @@ use embassy_stm32::{bind_interrupts, rcc, rng};
 use embassy_time::Timer;
 use heapless::Vec;
 use static_cell::StaticCell;
-
 
 use crate::control_loop::ControlLoop;
 use crate::control_loop::axis::Axis;
@@ -332,11 +332,7 @@ async fn main(spawner: Spawner) {
     let azimut = Axis::new(azimut_stepper);
     let elevation = Axis::new(elevation_stepper);
 
-    let control_loop = ControlLoop::new(
-        client,
-        azimut,
-        elevation,
-    ).await;
+    let control_loop = ControlLoop::new(client, azimut, elevation).await;
 
     spawner.spawn(ctrl_task(control_loop).unwrap());
 

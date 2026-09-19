@@ -25,6 +25,8 @@ minicbor-serde.workspace = true
 
 south-common.workspace = true
 
+nalgebra.workspace = true
+
 static_cell = { version = "2.1.1", features = ["nightly"] }
 
 embedded-storage-async = "0.4.1"

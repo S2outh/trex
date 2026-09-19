@@ -44,7 +44,7 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
         inner.enable_outputs();
 
         // Set master mode for counter (compare_pulse instead of update to mitigate x2 error)
-        inner.set_master_mode(MasterMode::COMPARE_PULSE);
+        inner.set_master_mode(MasterMode::UPDATE);
 
         // Initialize timer output
         inner.set_output_compare_mode(C::CHANNEL, OutputCompareMode::Toggle);
@@ -70,9 +70,21 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
     pub fn stop(&mut self) {
         self.inner.stop();
     }
+    pub fn is_enabled(&self) -> bool {
+        self.inner.regs_core().cr1().read().cen()
+    }
     pub fn set_frequency(&mut self, mut freq: Hertz) {
         freq.0 *= 2;
+        // A frequency of 0 is impossible, clamp to 1
+        if freq.0 == 0 {
+            freq.0 = 1;
+        }
         self.inner.set_frequency(freq, RoundTo::Slower);
         self.inner.generate_update_event();
+    }
+    pub fn get_frequency(&self) -> Hertz {
+        let mut freq = self.inner.get_frequency();
+        freq.0 /= 2;
+        freq
     }
 }
