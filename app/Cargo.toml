@@ -38,3 +38,4 @@ embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = 
 portable-atomic = "1.15.0"
 heapless = "0.9.3"
 critical-section = "1.2.0"
+libm = "0.2.16"

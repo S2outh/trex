@@ -2890,6 +2890,7 @@ dependencies = [
  "embassy-time",
  "embedded-storage-async",
  "heapless 0.9.3",
+ "libm",
  "minicbor-serde",
  "nalgebra",
  "portable-atomic",

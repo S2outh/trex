@@ -1,6 +1,8 @@
 use embassy_stm32::timer::{GeneralInstance4Channel, TimerChannel};
 
-use crate::drivers::stepper::Stepper;
+mod ramp_controller;
+
+use crate::{control_loop::axis::ramp_controller::TrapezoidRampController, drivers::stepper::Stepper};
 
 pub struct Axis<'d, T, TC, C>
 where
@@ -9,17 +11,19 @@ where
     C: TimerChannel,
 {
     stepper: Stepper<'d, T, TC, C>,
+    controller: TrapezoidRampController,
 }
 
 // limits
 const DEADBAND: f64 = 0.05; // rad
 const HALT_SPEED: f64 = 0.03; // rad/s
 const MAX_SPEED: f64 = 0.6; // rad/s
-const MAX_ACCELERATION: f64 = 0.5; // rad/s^2
+const ACCELERATION: f64 = 0.5; // rad/s^2
 
-// p values
-const V_K_P: f64 = 0.5;
-const A_K_P: f64 = 1.;
+// min 50 percent of the travel should be spent at max speed,
+// the controller uses this value to dynamically recalculate a
+// max speed at runtime
+const MIN_PERCENT_MAX_SPEED: f64 = 0.5;
 
 impl<'d, T, TC, C> Axis<'d, T, TC, C>
 where
@@ -28,7 +32,8 @@ where
     C: TimerChannel,
 {
     pub fn new(stepper: Stepper<'d, T, TC, C>) -> Self {
-        Self { stepper }
+        let controller = TrapezoidRampController::new(ACCELERATION, MAX_SPEED, MIN_PERCENT_MAX_SPEED);
+        Self { stepper, controller }
     }
 
     pub fn set_target_pos(&mut self, target_pos: f64, dt: f64) {
@@ -41,14 +46,7 @@ where
             return;
         }
 
-        let v_p = pos_diff * V_K_P;
-        let v_p_lim = v_p.clamp_magnitude(MAX_SPEED);
-
-        let speed_diff = v_p_lim - current_speed;
-        let a_p = speed_diff * A_K_P;
-        let a_p_lim = a_p.clamp_magnitude(MAX_ACCELERATION);
-
-        let new_speed = current_speed + a_p_lim * dt;
+        let new_speed = self.controller.update(current_speed, pos_diff, dt);
 
         self.stepper.set_speed(new_speed);
     }
