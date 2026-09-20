@@ -20,7 +20,7 @@ mod helpers {
     }
 }
 
-mod defmt_logger;
+mod logger;
 mod flash;
 
 pub struct NetConf {
@@ -62,7 +62,7 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<
         style("----------------------------------").yellow()
     );
 
-    defmt_logger::run(data.as_ref(), net_conf)
+    logger::run(data.as_ref(), net_conf)
         .await
         .context("defmt logger failed")
 }
@@ -88,7 +88,7 @@ pub async fn attach(net_conf: &NetConf, path: PathBuf, v: bool) -> Result<()> {
         style("----------------------------------").yellow()
     );
 
-    defmt_logger::run(data.as_ref(), net_conf)
+    logger::run(data.as_ref(), net_conf)
         .await
         .context("defmt logger failed")
 }
