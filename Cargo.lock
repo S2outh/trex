@@ -155,7 +155,7 @@ dependencies = [
  "nuid",
  "pin-project",
  "portable-atomic",
- "rand 0.10.2",
+ "rand 0.10.3",
  "regex",
  "ring",
  "rustls-native-certs",
@@ -327,8 +327,8 @@ dependencies = [
 
 [[package]]
 name = "chell"
-version = "7.8.2"
-source = "git+https://github.com/S2outh/chell-sys.git#60488a51e77a926bbc3d765f605dc75d93e63a85"
+version = "7.9.0"
+source = "git+https://github.com/S2outh/chell-sys.git#e213b946461bb2cec02652e6d8004e1725d55342"
 dependencies = [
  "chell-macros",
  "nalgebra",
@@ -336,15 +336,15 @@ dependencies = [
 
 [[package]]
 name = "chell-macros"
-version = "7.8.2"
-source = "git+https://github.com/S2outh/chell-sys.git#60488a51e77a926bbc3d765f605dc75d93e63a85"
+version = "7.9.0"
+source = "git+https://github.com/S2outh/chell-sys.git#e213b946461bb2cec02652e6d8004e1725d55342"
 dependencies = [
  "heck",
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
- "syn 2.0.119",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -1196,15 +1196,15 @@ dependencies = [
 
 [[package]]
 name = "embedded-storage"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21dea9854beb860f3062d10228ce9b976da520a73474aed3171ec276bc0c032"
+checksum = "c815b3ed4213d85d6cfd274b871f430c0681084e28dfd4a537877f47f844ec83"
 
 [[package]]
 name = "embedded-storage-async"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1763775e2323b7d5f0aa6090657f5e21cfa02ede71f5dc40eead06d64dcd15cc"
+checksum = "69aa7787b8ba0cf4e626c95839f811d853b75e24a0f7312a1eef324fedc13b21"
 dependencies = [
  "embedded-storage",
 ]
@@ -2085,9 +2085,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
+checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
 dependencies = [
  "chacha20",
  "getrandom 0.4.3",
@@ -2517,7 +2517,7 @@ dependencies = [
 [[package]]
 name = "south-common"
 version = "4.0.0"
-source = "git+https://github.com/S2outh/south-common.git#61b6303ceea0d779bf5a730629ddae0f39aaac19"
+source = "git+https://github.com/S2outh/south-common.git#e2e13f77c07b72d2562335ef378eb79c9d4b629e"
 dependencies = [
  "bitflags 2.13.2",
  "chell",
@@ -2925,6 +2925,7 @@ dependencies = [
  "serde",
  "south-common",
  "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

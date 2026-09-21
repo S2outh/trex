@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use tokio_stream::StreamExt;
+
 use clap::{Args, Parser, Subcommand};
 
 use nalgebra as na;
@@ -28,6 +30,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     SetTarget(TargetArgs),
+    ReadTm,
 }
 
 #[derive(Args)]
@@ -59,6 +62,13 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
+        }
+        Commands::ReadTm => {
+            let mut sub = nats_client.subscribe(format!("{}.>", defs::base_address())).await.unwrap();
+            loop {
+                let next = sub.next().await.unwrap();
+                println!("{:?}", next.payload);
+            }
         }
     }
 

@@ -1,20 +1,16 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use south_common::{chell::ChellDefinition, definitions::groundstation::trex as defs};
+use south_common::{
+    chell::ChellDefinition, definitions::groundstation::trex as defs, types::trex::State as StateTM,
+};
 
+use embassy_time::{Duration, Instant, Ticker};
 use nalgebra as na;
-use embassy_time::{Duration, Ticker};
 use portable_atomic::AtomicF64;
 use serde::Serialize;
 
 use crate::{NATS_MAX_MESSAGE_SIZE, NATS_NUM_SUBS, NatsCollections, control_loop::axis::AxisState};
 type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
-
-#[repr(u8)]
-pub enum StateTM {
-    Tracking,
-    Manual,
-}
 
 pub struct AtomicState {
     state: AtomicU8,
@@ -97,28 +93,26 @@ impl core::fmt::Display for EndOfStorage {
 impl core::error::Error for EndOfStorage {}
 
 struct WriteBuffer {
-    pos: usize,
-    storage: [u8; NATS_MAX_MESSAGE_SIZE],
+    storage: heapless::Vec<u8, NATS_MAX_MESSAGE_SIZE>,
 }
 
 impl WriteBuffer {
     fn new() -> Self {
-        Self { pos: 0, storage: [0; _] }
+        Self {
+            storage: heapless::Vec::new(),
+        }
     }
-    fn as_bytes(&self) -> &[u8] {
-        &self.storage[..self.pos]
+    fn get_inner(self) -> heapless::Vec<u8, NATS_MAX_MESSAGE_SIZE> {
+        self.storage
     }
 }
 
 impl minicbor::encode::Write for WriteBuffer {
     type Error = EndOfStorage;
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        if (self.storage.len() - self.pos) < buf.len() {
-            return Err(EndOfStorage)
-        }
-        let n_pos = self.pos + buf.len();
-        self.storage[self.pos..n_pos].copy_from_slice(buf);
-        self.pos = n_pos;
+        self.storage
+            .extend_from_slice(buf)
+            .map_err(|_| EndOfStorage)?;
         Ok(())
     }
 }
@@ -128,6 +122,14 @@ pub struct TMLoop<'a> {
     tm_channel: &'a TMChannel,
 }
 
+// This needs to be done via chell in the long run,
+// but rn chell requires alloc :(
+#[derive(serde::Serialize)]
+struct TMValue<T> {
+    timestamp: u64,
+    value: T,
+}
+
 impl<'a> TMLoop<'a> {
     pub fn new(nats_client: NatsClient<'a>, tm_channel: &'a TMChannel) -> Self {
         Self {
@@ -135,27 +137,39 @@ impl<'a> TMLoop<'a> {
             tm_channel,
         }
     }
+    async fn publish<T: serde::Serialize>(
+        &mut self,
+        def: &dyn ChellDefinition,
+        timestamp: u64,
+        value: T,
+    ) {
+        let mut storage = WriteBuffer::new();
+        let mut serializer = minicbor_serde::Serializer::new(&mut storage);
+        let tm_value = TMValue { timestamp, value };
+        if tm_value.serialize(&mut serializer).is_ok() {
+            self.nats_client
+                .publish(
+                    heapless::String::try_from(def.address()).unwrap(),
+                    storage.get_inner(),
+                )
+                .await;
+        }
+    }
     pub async fn run(&mut self) -> ! {
         const TM_INTERVAL: Duration = Duration::from_millis(500);
         let mut tm_ticker = Ticker::every(TM_INTERVAL);
         loop {
             let tm = self.tm_channel.load(Ordering::Relaxed);
-            
-            // Silence warnings
-            let _ = tm.az_vel;
-            let _ = tm.el_vel;
-            let _ = tm.state;
+            let timestamp = Instant::now().as_micros();
 
             let angles = na::Vector2::new(tm.az_pos, tm.el_pos);
+            self.publish(&defs::Angles, timestamp, angles).await;
 
-            let mut storage = WriteBuffer::new();
-            let mut serializer = minicbor_serde::Serializer::new(&mut storage);
-            if angles.serialize(&mut serializer).is_ok() {
-                self.nats_client.publish(
-                    heapless::String::try_from(defs::Angles.address()).unwrap(),
-                    heapless::vec::Vec::from_slice(storage.as_bytes()).unwrap(),
-                ).await;
-            }
+            let angular_velocities = na::Vector2::new(tm.az_vel, tm.el_vel);
+            self.publish(&defs::AngularVelocities, timestamp, angular_velocities)
+                .await;
+
+            self.publish(&defs::State, timestamp, tm.state).await;
 
             tm_ticker.next().await;
         }

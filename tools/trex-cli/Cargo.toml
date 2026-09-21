@@ -17,3 +17,4 @@ south-common.workspace = true
 nalgebra.workspace = true
 
 async-nats = "0.50.0"
+tokio-stream = "0.1.19"

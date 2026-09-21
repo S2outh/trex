@@ -13,7 +13,6 @@ use south_common::chell::ChellDefinition;
 use south_common::definitions::groundstation::trex as defs;
 use south_common::types::trex::{self, Command};
 
-use crate::tm_loop::StateTM;
 use crate::tm_loop::TMChannel;
 use crate::{NATS_NUM_SUBS, NatsCollections, control_loop::axis::Axis};
 
@@ -66,8 +65,8 @@ impl<'a> ControlLoop<'a> {
             Ok(cmd) => match cmd {
                 Command::State(state_cmd) => {
                     self.state = match state_cmd {
-                        trex::StateCommand::Tracking => State::Tracking,
-                        trex::StateCommand::Manual => State::Manual {
+                        trex::State::Tracking => State::Tracking,
+                        trex::State::Manual => State::Manual {
                             target: na::Vector2::zeros(),
                         },
                     }
@@ -89,7 +88,8 @@ impl<'a> ControlLoop<'a> {
     }
     pub async fn run_tracking(&mut self, _dt: f64) {
         // TODO
-        self.tm_channel.store_state(StateTM::Tracking, Ordering::Relaxed);
+        self.tm_channel
+            .store_state(trex::State::Tracking, Ordering::Relaxed);
         Timer::after(Duration::from_millis(200)).await;
     }
     pub async fn run_manual(&mut self, target: na::Vector2<f64>, dt: f64) {
@@ -98,7 +98,8 @@ impl<'a> ControlLoop<'a> {
         let el_state = self.elevation.update(target.y, dt);
         self.tm_channel.store_az(az_state, Ordering::Relaxed);
         self.tm_channel.store_el(el_state, Ordering::Relaxed);
-        self.tm_channel.store_state(StateTM::Manual, Ordering::Relaxed);
+        self.tm_channel
+            .store_state(trex::State::Manual, Ordering::Relaxed);
         Timer::after_millis(5).await;
     }
     pub async fn run(&mut self) -> ! {
