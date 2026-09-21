@@ -1,5 +1,7 @@
 pub mod axis;
 
+use core::sync::atomic::Ordering;
+
 use embassy_time::Instant;
 use nalgebra as na;
 
@@ -11,6 +13,8 @@ use south_common::chell::ChellDefinition;
 use south_common::definitions::groundstation::trex as defs;
 use south_common::types::trex::{self, Command};
 
+use crate::tm_loop::StateTM;
+use crate::tm_loop::TMChannel;
 use crate::{NATS_NUM_SUBS, NatsCollections, control_loop::axis::Axis};
 
 type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
@@ -31,6 +35,7 @@ enum State {
 
 pub struct ControlLoop<'a> {
     state: State,
+    tm_channel: &'a TMChannel,
     last_tick: Instant,
     nats_client: NatsClient<'a>,
     azimut: AzimutAxis<'a>,
@@ -38,13 +43,15 @@ pub struct ControlLoop<'a> {
 }
 
 impl<'a> ControlLoop<'a> {
-    pub async fn new(
+    pub fn new(
         nats_client: NatsClient<'a>,
+        tm_channel: &'a TMChannel,
         azimut: AzimutAxis<'a>,
         elevation: ElevationAxis<'a>,
     ) -> Self {
         Self {
             nats_client,
+            tm_channel,
             azimut,
             elevation,
             state: State::Manual {
@@ -69,21 +76,29 @@ impl<'a> ControlLoop<'a> {
                     let State::Manual { ref mut target } = self.state else {
                         return;
                     };
-                    defmt::info!("setting new target: {} {}", new_target.x, new_target.y);
+                    defmt::info!(
+                        "[CTRL] setting new target: {} {}",
+                        new_target.x,
+                        new_target.y
+                    );
                     *target = new_target;
                 }
             },
-            Err(e) => defmt::warn!("could not decode cmd: {}", defmt::Debug2Format(&e)),
+            Err(e) => defmt::warn!("[CTRL] could not decode cmd: {}", defmt::Debug2Format(&e)),
         }
     }
     pub async fn run_tracking(&mut self, _dt: f64) {
         // TODO
+        self.tm_channel.store_state(StateTM::Tracking, Ordering::Relaxed);
         Timer::after(Duration::from_millis(200)).await;
     }
     pub async fn run_manual(&mut self, target: na::Vector2<f64>, dt: f64) {
         // TEMP
-        self.azimut.set_target_pos(target.x, dt);
-        self.elevation.set_target_pos(target.y, dt);
+        let az_state = self.azimut.update(target.x, dt);
+        let el_state = self.elevation.update(target.y, dt);
+        self.tm_channel.store_az(az_state, Ordering::Relaxed);
+        self.tm_channel.store_el(el_state, Ordering::Relaxed);
+        self.tm_channel.store_state(StateTM::Manual, Ordering::Relaxed);
         Timer::after_millis(5).await;
     }
     pub async fn run(&mut self) -> ! {

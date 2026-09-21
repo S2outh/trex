@@ -20,8 +20,8 @@ mod helpers {
     }
 }
 
-mod logger;
 mod flash;
+mod logger;
 
 pub struct NetConf {
     pub host: String,

@@ -80,7 +80,10 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
             freq.0 = 1;
         }
         self.inner.set_frequency(freq, RoundTo::Slower);
-        self.inner.generate_update_event();
+        // if count is greater than new arr limit, reset timer to 0
+        if self.inner.regs_gp16().cnt().read().cnt() > self.inner.regs_gp16().arr().read().arr() {
+            self.inner.generate_update_event();
+        }
     }
     pub fn get_frequency(&self) -> Hertz {
         let mut freq = self.inner.get_frequency();

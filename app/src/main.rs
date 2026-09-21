@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(clamp_magnitude)]
 
 use core::net::{Ipv4Addr, SocketAddr};
 
@@ -31,6 +30,7 @@ use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
 use crate::logger::TcpLogger;
+use crate::tm_loop::{TMChannel, TMLoop};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -41,6 +41,7 @@ mod control_loop;
 mod drivers;
 mod firmware_manager;
 mod logger;
+mod tm_loop;
 
 // General setup stuff
 const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
@@ -86,6 +87,8 @@ const NATS_PORT: u16 = 4222;
 const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 const NATS_NUM_SUBS: usize = 1;
+
+static TM_CHANNEL: TMChannel = TMChannel::new();
 
 // Devices
 const AZ_STEPPS_PER_REV: u32 = 12_000;
@@ -139,6 +142,11 @@ async fn petter(mut watchdog: IndependentWatchdog<'static, IWDG1>) {
 #[embassy_executor::task]
 pub async fn ctrl_task(mut control_loop: ControlLoop<'static>) -> ! {
     control_loop.run().await
+}
+
+#[embassy_executor::task]
+pub async fn tm_task(mut tm_loop: TMLoop<'static>) -> ! {
+    tm_loop.run().await
 }
 
 #[embassy_executor::task]
@@ -303,6 +311,10 @@ async fn main(spawner: Spawner) {
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
 
+    // launch tm loop
+    let tm_loop = TMLoop::new(client.clone(), &TM_CHANNEL);
+    spawner.spawn(tm_task(tm_loop).unwrap());
+
     // Azimut stepper setup
     let step = PulsePin::new(p.PB0);
     let dir = Output::new(p.PE9, Level::Low, Speed::Medium);
@@ -332,8 +344,8 @@ async fn main(spawner: Spawner) {
     let azimut = Axis::new(azimut_stepper);
     let elevation = Axis::new(elevation_stepper);
 
-    let control_loop = ControlLoop::new(client, azimut, elevation).await;
-
+    // launch control loop
+    let control_loop = ControlLoop::new(client, &TM_CHANNEL, azimut, elevation);
     spawner.spawn(ctrl_task(control_loop).unwrap());
 
     core::future::pending::<()>().await;

@@ -22,6 +22,7 @@ blake3.workspace = true
 
 serde.workspace = true
 minicbor-serde.workspace = true
+minicbor = "2.3.0"
 
 south-common.workspace = true
 
@@ -35,7 +36,7 @@ embassy-embedded-hal = "0.6.0"
 embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }
 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt"] }
-portable-atomic = "1.15.0"
+portable-atomic = { version = "1.15.0", features = ["float"] }
 heapless = "0.9.3"
 critical-section = "1.2.0"
 libm = "0.2.16"
