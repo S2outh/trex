@@ -12,7 +12,7 @@ minicbor-serde = { workspace = true, features = [ "std" ] }
 clap.workspace = true
 anyhow.workspace = true
 
-south-common.workspace = true
+south-common = { workspace = true, features = ["serde"] }
 
 nalgebra.workspace = true
 

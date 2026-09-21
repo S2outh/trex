@@ -6,9 +6,9 @@ use clap::{Args, Parser, Subcommand};
 
 use nalgebra as na;
 
-use south_common::chell::ChellDefinition;
-use south_common::definitions::groundstation::trex as defs;
-use south_common::types::trex::Command;
+use south_common::chell::{ChellDefinition, match_def};
+use south_common::definitions::groundstation::{self, trex as defs};
+use south_common::types::trex::{Command, State};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -41,6 +41,16 @@ pub struct TargetArgs {
     pub el: f64,
 }
 
+// This needs to be done via chell in the long run,
+// but rn chell ground support for deser is nonexistent :(
+#[derive(serde::Deserialize, Debug)]
+struct TMValue<T> {
+    #[allow(unused)]
+    timestamp: u64,
+    #[allow(unused)]
+    value: T,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -64,10 +74,27 @@ async fn main() -> Result<()> {
                 .await?;
         }
         Commands::ReadTm => {
-            let mut sub = nats_client.subscribe(format!("{}.>", defs::base_address())).await.unwrap();
+            let mut sub = nats_client
+                .subscribe(format!("{}.>", defs::base_address()))
+                .await
+                .unwrap();
             loop {
-                let next = sub.next().await.unwrap();
-                println!("{:?}", next.payload);
+                let msg = sub.next().await.unwrap();
+                let def = groundstation::from_address(msg.subject.as_str()).unwrap();
+                match_def!(def, {
+                    defs::State => {
+                        let v = minicbor_serde::from_slice::<TMValue<State>>(&msg.payload)?;
+                        println!("[State] {:#?}", v);
+                    },
+                    defs::Angles => {
+                        let v = minicbor_serde::from_slice::<TMValue<na::Vector2<f64>>>(&msg.payload)?;
+                        println!("[Angles] {:#?}", v);
+                    },
+                    defs::AngularVelocities => {
+                        let v = minicbor_serde::from_slice::<TMValue<na::Vector2<f64>>>(&msg.payload)?;
+                        println!("[Angular Velocities] {:#?}", v);
+                    },
+                });
             }
         }
     }
