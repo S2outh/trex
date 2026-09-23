@@ -44,7 +44,14 @@ impl<'a> FirmwareManager<'a> {
         let state = updater.get_state().await.unwrap();
         let validated = if let State::Swap = state { false } else { true };
 
-        defmt::info!("[FW MGR] Initializing firmware manager. State: {}", state);
+        defmt::info!("[FW MGR] Initializing firmware manager");
+
+        match state {
+            State::Boot => defmt::info!("[FW MGR] Booting stable firmware"),
+            State::Swap => defmt::warn!("[FW MGR] Booting new firmware"),
+            State::Revert => defmt::error!("[FW MGR] Booting reverted firmware"),
+            State::DfuDetach => defmt::error!("[FW MGR] DFU Detatch mode"),
+        }
 
         Self {
             updater,

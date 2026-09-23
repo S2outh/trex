@@ -19,12 +19,11 @@ where
 {
     stepper: Stepper<'d, T, TC, C>,
     controller: TrapezoidRampController,
+    acceleration: f64,
 }
 
 // limits
 const DEADBAND: f64 = 0.05; // rad
-const MAX_SPEED: f64 = 0.6; // rad/s
-const ACCELERATION: f64 = 0.5; // rad/s^2
 
 // min 50 percent of the travel should be spent at the speed limit,
 // the controller uses this value to dynamically recalculate a
@@ -37,12 +36,13 @@ where
     TC: GeneralInstance4Channel,
     C: TimerChannel,
 {
-    pub fn new(stepper: Stepper<'d, T, TC, C>) -> Self {
+    pub fn new(stepper: Stepper<'d, T, TC, C>, max_speed: f64, acceleration: f64) -> Self {
         let controller =
-            TrapezoidRampController::new(ACCELERATION, MAX_SPEED, MIN_PERCENT_MAX_SPEED);
+            TrapezoidRampController::new(acceleration, max_speed, MIN_PERCENT_MAX_SPEED);
         Self {
             stepper,
             controller,
+            acceleration,
         }
     }
 
@@ -52,7 +52,7 @@ where
         let pos_diff = target_pos - current_pos;
 
         // calculate halt_speed from acceleration to prevent overshoot
-        let halt_speed = dt * ACCELERATION;
+        let halt_speed = dt * self.acceleration;
         if pos_diff.abs() < DEADBAND && current_vel.abs() < halt_speed {
             self.stepper.stop();
             return AxisState {

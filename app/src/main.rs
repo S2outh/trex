@@ -78,7 +78,7 @@ static LOG_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 static LOG_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 
 // NATS
-const NATS_MAX_TOPIC_SIZE: usize = 32;
+const NATS_MAX_TOPIC_SIZE: usize = 64;
 const NATS_MAX_MESSAGE_SIZE: usize = 256;
 type NatsCollections = embassy_nats::Heapless<NATS_MAX_TOPIC_SIZE, NATS_MAX_MESSAGE_SIZE>;
 static NATS_STORAGE: embassy_nats::Storage<NatsCollections> = embassy_nats::Storage::new();
@@ -92,7 +92,12 @@ static TM_CHANNEL: TMChannel = TMChannel::new();
 
 // Devices
 const AZ_STEPPS_PER_REV: u32 = 12_000;
+const AZ_MAX_SPEED: f64 = 0.6; // rad/s
+const AZ_ACCELERATION: f64 = 0.4; // rad/s^2
+
 const EL_STEPPS_PER_REV: u32 = 24_000;
+const EL_MAX_SPEED: f64 = 1.1; // rad/s
+const EL_ACCELERATION: f64 = 0.8; // rad/s^2
 
 type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
@@ -341,8 +346,8 @@ async fn main(spawner: Spawner) {
     let mut _red_led = Output::new(p.PE0, Level::High, Speed::Low);
 
     // setup control loop
-    let azimut = Axis::new(azimut_stepper);
-    let elevation = Axis::new(elevation_stepper);
+    let azimut = Axis::new(azimut_stepper, AZ_MAX_SPEED, AZ_ACCELERATION);
+    let elevation = Axis::new(elevation_stepper, EL_MAX_SPEED, EL_ACCELERATION);
 
     // launch control loop
     let control_loop = ControlLoop::new(client, &TM_CHANNEL, azimut, elevation);

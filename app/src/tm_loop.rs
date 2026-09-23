@@ -16,13 +16,19 @@ pub struct AtomicState {
     state: AtomicU8,
 }
 impl AtomicState {
+    const fn to_u8(state: StateTM) -> u8 {
+        match state {
+            StateTM::Tracking => 0,
+            StateTM::Manual => 1,
+        }
+    }
     pub const fn new(state: StateTM) -> Self {
         Self {
-            state: AtomicU8::new(state as u8),
+            state: AtomicU8::new(Self::to_u8(state)),
         }
     }
     pub fn store(&self, state: StateTM, order: Ordering) {
-        self.state.store(state as u8, order);
+        self.state.store(Self::to_u8(state), order);
     }
     pub fn load(&self, order: Ordering) -> StateTM {
         match self.state.load(order) {
