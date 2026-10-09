@@ -4,6 +4,10 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
+    // set link args
+    println!("cargo:rustc-link-arg=-Tlink.x"); // find linker file
+    println!("cargo:rustc-link-arg=--nmagic"); // no std memory layout
+    
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
     let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
