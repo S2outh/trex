@@ -5,7 +5,7 @@ use trex_firmware_transport::*;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use console::style;
 use object::{
     Endianness, Object, ObjectSegment,
@@ -100,6 +100,7 @@ pub fn print_size(elf: &[u8]) -> Result<()> {
 
 pub async fn flash_elf(
     elf: &[u8],
+    key: &[u8],
     net_conf: &NetConf,
     flash_conf: &FlashConf,
     v: bool,
@@ -122,7 +123,9 @@ pub async fn flash_elf(
         style("[FLASH]").cyan()
     );
 
-    let hash = blake3::hash(&object).into();
+    let key = embassy_crypto::ed25519::SigningKey::from_bytes(key.try_into().context("key has the wrong length")?);
+    let hash = embassy_crypto::Sha512::digest(&object);
+    let signature = key.sign(&hash).map_err(|_| anyhow!("could not sign hash"))?.to_bytes();
 
     vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 
@@ -160,7 +163,7 @@ pub async fn flash_elf(
     vprintln!(v, "{} Applying firmware...", style("[FLASH]").cyan());
 
     HeaderSerializer::new(async |a| tcp.write_all(a).await)
-        .write_header(Header::Apply { size, hash })
+        .write_header(Header::Apply { size, signature })
         .await
         .context("could not send header")?;
 

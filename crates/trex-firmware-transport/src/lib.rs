@@ -2,7 +2,8 @@
 
 use num_enum::{FromPrimitive, IntoPrimitive};
 
-pub type Hash = [u8; blake3::OUT_LEN];
+const SIGNATURE_SIZE: usize = 64;
+pub type Signature = [u8; SIGNATURE_SIZE];
 
 pub const MAGIC: [u8; 4] = *b"TREX";
 pub const CHUNK_SIZE: usize = 4096;
@@ -21,7 +22,7 @@ pub enum HeaderType {
 pub enum Header {
     Validate,
     Chunk { offset: usize, size: usize },
-    Apply { size: usize, hash: Hash },
+    Apply { size: usize, signature: Signature },
     Reset,
     Invalid(u8),
 }
@@ -71,8 +72,8 @@ where
             }
             HeaderType::Apply => {
                 let size = self.read_word().await?;
-                let hash = self.read().await?;
-                Header::Apply { size, hash }
+                let signature = self.read().await?;
+                Header::Apply { size, signature }
             }
             HeaderType::Reset => Header::Reset,
             HeaderType::Invalid(t) => Header::Invalid(t),
@@ -135,10 +136,10 @@ where
                 self.write_word(offset).await?;
                 self.write_word(size).await?;
             }
-            Header::Apply { size, hash } => {
+            Header::Apply { size, signature } => {
                 self.write_byte(HeaderType::Apply.into()).await?;
                 self.write_word(size).await?;
-                (self.write_buf)(&hash).await?;
+                (self.write_buf)(&signature).await?;
             }
             Header::Reset => {
                 self.write_byte(HeaderType::Reset.into()).await?;

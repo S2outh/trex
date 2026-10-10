@@ -20,14 +20,13 @@ embassy-futures = { version = "0.1.2" }
 embassy-boot-stm32 = { version = "0.8.0" }
 
 cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = "0.7.6"
+cortex-m-rt = "0.7.7"
 
 defmt = "1.1"
 
 south-common = { git = "https://github.com/S2outh/south-common.git", features = ["serde"] }
 
 # Common
-blake3 = { version = "=1.8.0", default-features = false, features = ["traits-preview", "digest"] }
 
 serde = { version = "1.0.229", default-features = false, features = ["derive"] }
 minicbor-serde = { version = "0.7.1" }
@@ -35,8 +34,8 @@ minicbor-serde = { version = "0.7.1" }
 nalgebra = { version = "0.35.0", default-features = false }
 
 # Tools
-tokio = { version = "1.53.1", features = [ "rt-multi-thread", "macros" ] }
-clap = { version = "4.6.6", features = ["derive"] }
+tokio = { version = "1.53.2", features = [ "rt-multi-thread", "macros" ] }
+clap = { version = "4.6.7", features = ["derive"] }
 anyhow = "1.0.104"
 
 [profile.dev]

@@ -18,7 +18,6 @@ cortex-m-rt.workspace = true
 embassy-boot-stm32 = { workspace = true, features = ["defmt"] }
 
 defmt.workspace = true
-blake3.workspace = true
 
 serde.workspace = true
 minicbor-serde.workspace = true
@@ -30,7 +29,7 @@ nalgebra.workspace = true
 
 static_cell = { version = "2.1.1", features = ["nightly"] }
 
-embedded-storage-async = "0.4.1"
+embedded-storage-async = "0.4.2"
 embassy-embedded-hal = "0.6.0"
 
 embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }

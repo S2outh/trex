@@ -39,12 +39,16 @@ pub enum Commands {
     Validate,
     /// Reset the target
     Reset,
+    /// Generate a pair of keys. The keys will be printed to stdou
+    Keygen(KeygenArgs),
 }
 
 #[derive(Args)]
 pub struct FlashArgs {
     /// path to the executable
     pub path: PathBuf,
+    /// path to private key
+    pub key: PathBuf,
     /// base offset to optionally check against
     #[arg(long, value_parser=maybe_hex::<u64>)]
     pub base: Option<u64>,
@@ -57,6 +61,14 @@ pub struct FlashArgs {
 pub struct FileArgs {
     /// path to the executable
     pub path: PathBuf,
+}
+
+#[derive(Args)]
+pub struct KeygenArgs {
+    /// path to the private key
+    pub private: PathBuf,
+    /// path to the public key
+    pub public: PathBuf,
 }
 
 impl From<&Cli> for NetConf {
@@ -73,6 +85,7 @@ impl From<FlashArgs> for FlashConf {
     fn from(v: FlashArgs) -> Self {
         FlashConf {
             path: v.path,
+            key: v.key,
             base: v.base,
             max_size: v.max_size,
         }
