@@ -63,14 +63,14 @@ impl<'a> ControlLoop<'a> {
     pub async fn update(&mut self, nats_msg: NatsMsg) {
         match minicbor_serde::from_slice::<Command>(&nats_msg.data) {
             Ok(cmd) => match cmd {
-                Command::State(state_cmd) => {
-                    self.state = match state_cmd {
-                        trex::State::Tracking => State::Tracking,
-                        trex::State::Manual => State::Manual {
-                            target: na::Vector2::zeros(),
-                        },
-                    }
-                }
+                // Command::State(state_cmd) => {
+                //     self.state = match state_cmd {
+                //         trex::State::Tracking => State::Tracking,
+                //         trex::State::Manual => State::Manual {
+                //             target: na::Vector2::zeros(),
+                //         },
+                //     }
+                // }
                 Command::Rotate(new_target) => {
                     let State::Manual { ref mut target } = self.state else {
                         return;
@@ -81,7 +81,8 @@ impl<'a> ControlLoop<'a> {
                         new_target.y
                     );
                     *target = new_target;
-                }
+                },
+                _ => todo!(),
             },
             Err(e) => defmt::warn!("[CTRL] could not decode cmd: {}", defmt::Debug2Format(&e)),
         }

@@ -8,13 +8,12 @@ trex-firmware-transport.path = "../../crates/trex-firmware-transport"
 
 tokio = { workspace = true, features = ["io-util", "time", "net"] }
 
-blake3.workspace = true
 
 clap.workspace = true
 anyhow.workspace = true
 
 indicatif = "0.18.6"
-console = "0.16.4"
+console = "0.16.6"
 object = "0.40.0"
 clap-num = "1.2.0"
 

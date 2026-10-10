@@ -20,5 +20,6 @@ async fn main() -> Result<()> {
         Commands::Size(args) => trex_probe::size(args.path, v).await,
         Commands::Validate => trex_probe::validate(&net_conf, v).await,
         Commands::Reset => trex_probe::reset(&net_conf, v).await,
+        Commands::Keygen(args) => trex_probe::keygen(args.private, args.public, v).await,
     }
 }

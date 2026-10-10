@@ -12,6 +12,8 @@ type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<
 >;
 type MtxFlash<'a> = Mutex<NoopRawMutex, Flash<'a, Async>>;
 
+const PUBLIC_KEY: &'static [u8] = include_bytes!("keys/public.key");
+
 pub struct FirmwareManagerStorage<'a> {
     flash: MtxFlash<'a>,
     magic: AlignedBuffer<WRITE_SIZE>,
@@ -110,7 +112,7 @@ impl<'a> FirmwareManager<'a> {
                         defmt::error!("[FW MGR] Could not write firmware: {}", e);
                     }
                 }
-                Header::Apply { size, hash } => {
+                Header::Apply { size, signature } => {
                     if !self.validated {
                         defmt::warn!("[FW MGR] Not validated, ignoring apply cmd");
                         continue;
@@ -118,24 +120,23 @@ impl<'a> FirmwareManager<'a> {
 
                     defmt::info!("[FW MGR] Trying to apply new firmware...");
 
-                    let mut local_hash: Hash = [0u8; _];
-                    let mut chunk_buf = [0u8; blake3::CHUNK_LEN];
+                    const HASH_CHUNK_SIZE: usize = 64;
+                    let mut chunk_buf = AlignedBuffer([0u8; HASH_CHUNK_SIZE]);
                     if let Err(e) = self
                         .updater
-                        .hash::<blake3::Hasher>(size as u32, &mut chunk_buf, &mut local_hash)
-                        .await
+                        .verify_and_mark_updated::<embassy_crypto::Sha512, embassy_crypto::ed25519::VerifyingKey>(
+                            PUBLIC_KEY,
+                            &signature,
+                            chunk_buf.as_mut(),
+                            size as u32,
+                        ).await
                     {
-                        defmt::error!("[FW MGR] Could not hash firmware: {}", e);
+                        defmt::error!("[FW MGR] Could not verify firmware: {}", e);
                         continue;
                     }
 
-                    if local_hash != hash {
-                        defmt::info!("[FW MGR] Invalid Hash");
-                        continue;
-                    }
                     defmt::info!("[FW MGR] Switching to new firmware...");
 
-                    let _ = self.updater.mark_updated().await;
                     cortex_m::peripheral::SCB::sys_reset();
                 }
                 Header::Reset => cortex_m::peripheral::SCB::sys_reset(),
