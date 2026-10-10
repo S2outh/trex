@@ -1,8 +1,6 @@
-use std::{fs, path::PathBuf, time::Duration};
+use std::{fs, path::PathBuf};
 
-use indicatif::{ProgressBar, ProgressStyle};
 use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
 
 use trex_firmware_transport::*;
 
@@ -22,6 +20,7 @@ mod helpers {
 
 mod flash;
 mod logger;
+mod utils;
 
 pub struct NetConf {
     pub host: String,
@@ -35,11 +34,6 @@ pub struct FlashConf {
     pub base: Option<u64>,
     pub max_size: Option<u64>,
 }
-
-const SP_TEMPLATE: &str = "{spinner} Connecting to host...";
-
-const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
-const PR_CHARS: &str = "=>-";
 
 pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Loading image", style("[RUN]").yellow());
@@ -107,11 +101,11 @@ pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Resul
 }
 
 pub async fn size(path: PathBuf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Loading image", style("[SIZE]").cyan());
+    vprintln!(v, "{} Loading image", style("[SIZE]").blue());
 
     let data = fs::read(path).context("Failed to load image")?;
 
-    vprintln!(v, "{} Successfully loaded image", style("[SIZE]").cyan());
+    vprintln!(v, "{} Successfully loaded image", style("[SIZE]").blue());
 
     flash::print_size(data.as_ref())
 }
@@ -119,15 +113,7 @@ pub async fn size(path: PathBuf, v: bool) -> Result<()> {
 pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
 
-    let progress_style =
-        ProgressStyle::with_template(&format!("{} {}", style("[VALIDATE]").green(), SP_TEMPLATE))
-            .unwrap();
-    let spinner = ProgressBar::new_spinner().with_style(progress_style);
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
-        .await
-        .context("could not connect to target")?;
-    spinner.finish_and_clear();
+    let mut tcp = utils::connect_loading(net_conf, style("[VALIDATE]").green()).await?;
 
     vprintln!(
         v,
@@ -135,10 +121,12 @@ pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
         style("[VALIDATE]").green()
     );
 
-    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+    Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Validate)
         .await
         .context("could not send header")?;
+
+    utils::await_response(&mut tcp).await.context("validation failed")?;
 
     vprintln!(v, "{} Done!", style("[VALIDATE]").green());
 
@@ -148,22 +136,16 @@ pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
 pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
     vprintln!(v, "{} Connecting to target...", style("[RESET]").red());
 
-    let progress_style =
-        ProgressStyle::with_template(&format!("{} {}", style("[RESET]").red(), SP_TEMPLATE))
-            .unwrap();
-    let spinner = ProgressBar::new_spinner().with_style(progress_style);
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
-        .await
-        .context("could not connect to target")?;
-    spinner.finish_and_clear();
+    let mut tcp = utils::connect_loading(net_conf, style("[RESET]").red()).await?;
 
     vprintln!(v, "{} Sending reset request...", style("[RESET]").red());
 
-    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+    Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Reset)
         .await
         .context("could not send header")?;
+
+    utils::await_response(&mut tcp).await.context("reset failed")?;
 
     vprintln!(v, "{} Done!", style("[RESET]").red());
 
@@ -171,13 +153,15 @@ pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
 }
 
 pub async fn keygen(private_file: PathBuf, public_file: PathBuf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Generating keypair...", style("[KEYGEN]").cyan());
+    vprintln!(v, "{} Generating keypair...", style("[KEYGEN]").magenta());
+
     let mut private_key = [0u8; 32];
     getrandom::fill(&mut private_key)?;
     let keypair = salty::Keypair::from(&private_key);
     let public_key = keypair.public.to_bytes();
 
-    vprintln!(v, "{} Saving keypair...", style("[KEYGEN]").cyan());
+    vprintln!(v, "{} Saving keypair...", style("[KEYGEN]").magenta());
+
     fs::write(private_file, private_key).context("could not create private key file")?;
     fs::write(public_file, public_key).context("could not create public key file")?;
 

@@ -1,9 +1,6 @@
-use std::time::Duration;
-
 use trex_firmware_transport::*;
 
 use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
 
 use anyhow::{Context, Result, bail};
 use console::style;
@@ -12,9 +9,12 @@ use object::{
     read::elf::{ElfFile32, ProgramHeader},
 };
 
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressIterator, ProgressStyle};
 
-use crate::{FlashConf, NetConf, PR_CHARS, PR_TEMPLATE, SP_TEMPLATE};
+use crate::{FlashConf, NetConf, utils};
+
+const PR_TEMPLATE: &str = "Sending: [{bar:30.green/blue}] Chunk: {pos}/{len} [{elapsed}]";
+const PR_CHARS: &str = "=>-";
 
 fn elf_objectcopy(data: &[u8]) -> Result<(u64, Vec<u8>)> {
     let file = ElfFile32::<Endianness>::parse(data)?;
@@ -129,15 +129,7 @@ pub async fn flash_elf(
 
     vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 
-    let progress_style =
-        ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), SP_TEMPLATE))
-            .unwrap();
-    let spinner = ProgressBar::new_spinner().with_style(progress_style);
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    let mut tcp = TcpStream::connect((net_conf.host.clone(), net_conf.firmware_port))
-        .await
-        .context("could not connect to target")?;
-    spinner.finish_and_clear();
+    let mut tcp = utils::connect_loading(net_conf, style("[FLASH]").cyan()).await?;
 
     vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
 
@@ -145,6 +137,7 @@ pub async fn flash_elf(
         ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
             .unwrap()
             .progress_chars(PR_CHARS);
+
     for (i, chunk) in object
         .chunks(CHUNK_SIZE)
         .enumerate()
@@ -152,7 +145,7 @@ pub async fn flash_elf(
     {
         let offset = i * CHUNK_SIZE;
         let size = chunk.len();
-        HeaderSerializer::new(async |a| tcp.write_all(a).await)
+        Serializer::new(async |a| tcp.write_all(a).await)
             .write_header(Header::Chunk { offset, size })
             .await
             .context("could not send header")?;
@@ -162,10 +155,12 @@ pub async fn flash_elf(
 
     vprintln!(v, "{} Applying firmware...", style("[FLASH]").cyan());
 
-    HeaderSerializer::new(async |a| tcp.write_all(a).await)
+    Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Apply { size, signature })
         .await
         .context("could not send header")?;
+
+    utils::await_response(&mut tcp).await.context("apply failed")?;
 
     vprintln!(v, "{} Done!", style("[FLASH]").cyan());
 

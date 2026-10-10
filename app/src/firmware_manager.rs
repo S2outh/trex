@@ -3,6 +3,7 @@ use embassy_futures::yield_now;
 use embassy_net::tcp::{self, TcpSocket};
 use embassy_stm32::flash::{Async, Flash, WRITE_SIZE};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
+use embassy_time::{Duration, Timer};
 use trex_firmware_transport::*;
 
 type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<
@@ -62,14 +63,17 @@ impl<'a> FirmwareManager<'a> {
             validated,
         }
     }
-    async fn set_validated(&mut self) {
+    async fn try_validate(&mut self) -> bool {
         if !self.validated {
             defmt::info!("[FW MGR] Firmware validated");
             self.validated = true;
-            self.updater.mark_booted().await.unwrap()
+            self.updater.mark_booted().await.unwrap();
+            true
+        } else {
+            false
         }
     }
-    async fn read_buf(&mut self, mut buf: &mut [u8]) -> Result<(), tcp::Error> {
+    async fn read_all(&mut self, mut buf: &mut [u8]) -> Result<(), tcp::Error> {
         while !buf.is_empty() {
             let bytes_read = self.socket.read(buf).await?;
             buf = &mut buf[bytes_read..];
@@ -81,16 +85,47 @@ impl<'a> FirmwareManager<'a> {
         }
         Ok(())
     }
+
+    async fn write_all(&mut self, mut buf: &[u8]) -> Result<(), tcp::Error> {
+        while !buf.is_empty() {
+            let bytes_written = self.socket.write(buf).await?;
+            buf = &buf[bytes_written..];
+            if bytes_written == 0 {
+                return Err(tcp::Error::ConnectionReset);
+            }
+            // Yield here to not block in case of large blocks of data
+            yield_now().await;
+        }
+        Ok(())
+    }
+    async fn respond(&mut self, response: Response) -> Result<(), tcp::Error> {
+        if let Err(e) = Serializer::new(async |a| self.write_all(a).await)
+            .write_response(response)
+            .await {
+            defmt::error!("could not send response: {}", e);
+        }
+        Ok(())
+    }
     async fn run_connected(&mut self) {
         loop {
-            let Ok(header) = HeaderDeserializer::new(async |a| self.read_buf(a).await)
-                .sync()
+            let Ok(header) = Deserializer::new(async |a| self.read_all(a).await)
+                .read_header()
                 .await
             else {
                 return;
             };
             match header {
-                Header::Validate => self.set_validated().await,
+                Header::Validate => {
+                    if self.try_validate().await {
+                        if self.respond(Response::Success).await.is_err() {
+                            return;
+                        }
+                    } else {
+                        if self.respond(Response::Fail).await.is_err() {
+                            return;
+                        }
+                    }
+                },
                 Header::Chunk { offset, size } => {
                     defmt::info!(
                         "[FW MGR] Received chunk, offset: {}, size: {}",
@@ -99,7 +134,7 @@ impl<'a> FirmwareManager<'a> {
                     );
 
                     let mut chunk = AlignedBuffer([0; CHUNK_SIZE]);
-                    if self.read_buf(&mut chunk.as_mut()[..size]).await.is_err() {
+                    if self.read_all(&mut chunk.as_mut()[..size]).await.is_err() {
                         return;
                     };
 
@@ -129,14 +164,27 @@ impl<'a> FirmwareManager<'a> {
                         ).await
                     {
                         defmt::error!("[FW MGR] Could not verify firmware: {}", e);
+                        if self.respond(Response::Fail).await.is_err() {
+                            return;
+                        }
                         continue;
+                    }
+
+                    if self.respond(Response::Success).await.is_err() {
+                        return;
                     }
 
                     defmt::info!("[FW MGR] Switching to new firmware...");
 
                     cortex_m::peripheral::SCB::sys_reset();
                 }
-                Header::Reset => cortex_m::peripheral::SCB::sys_reset(),
+                Header::Reset => {
+                    if self.respond(Response::Success).await.is_err() {
+                        return;
+                    }
+                    Timer::after(Duration::from_secs(1)).await;
+                    cortex_m::peripheral::SCB::sys_reset();
+                }
                 Header::Invalid(t) => defmt::warn!("[FW MGR] Received invalid Header! [{}]", t),
             }
         }

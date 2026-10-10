@@ -2,11 +2,24 @@
 
 use num_enum::{FromPrimitive, IntoPrimitive};
 
-const SIGNATURE_SIZE: usize = 64;
-pub type Signature = [u8; SIGNATURE_SIZE];
+// Starting delimiter
+const MAGIC: [u8; 4] = *b"TREX";
 
-pub const MAGIC: [u8; 4] = *b"TREX";
+// ed25519 signature length
+pub const SIGNATURE_LENGTH: usize = 64;
+pub type Signature = [u8; SIGNATURE_LENGTH];
+
+// Data chunk
 pub const CHUNK_SIZE: usize = 4096;
+
+// Headers for the message, where applicable the body is a raw bytestream
+pub enum Header {
+    Validate,
+    Chunk { offset: usize, size: usize },
+    Apply { size: usize, signature: Signature },
+    Reset,
+    Invalid(u8),
+}
 
 #[derive(FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -19,22 +32,24 @@ pub enum HeaderType {
     Invalid(u8),
 }
 
-pub enum Header {
-    Validate,
-    Chunk { offset: usize, size: usize },
-    Apply { size: usize, signature: Signature },
-    Reset,
+// Response indicating success or failure. Send for validate, apply and reset messages.
+#[derive(FromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum Response {
+    Success,
+    Fail,
+    #[num_enum(catch_all)]
     Invalid(u8),
 }
 
-pub struct HeaderDeserializer<F, E>
+pub struct Deserializer<F, E>
 where
     F: AsyncFnMut(&mut [u8]) -> Result<(), E>,
 {
     read_buf: F,
 }
 
-impl<F, E> HeaderDeserializer<F, E>
+impl<F, E> Deserializer<F, E>
 where
     F: AsyncFnMut(&mut [u8]) -> Result<(), E>,
 {
@@ -56,8 +71,26 @@ where
         Ok(u32::from_le_bytes(self.read().await?) as usize)
     }
 
-    async fn read_header(&mut self) -> Result<Header, E> {
+    async fn sync(&mut self) -> Result<(), E> {
+        let mut magic_pos = 0;
+        loop {
+            let byte = self.read_byte().await?;
+            if byte == MAGIC[magic_pos] {
+                magic_pos += 1;
+                if magic_pos == MAGIC.len() {
+                    return Ok(());
+                }
+            } else {
+                magic_pos = 0;
+            }
+        }
+    }
+
+    pub async fn read_header(&mut self) -> Result<Header, E> {
+        self.sync().await?;
+
         let header_type = HeaderType::from(self.read_byte().await?);
+
         let header = match header_type {
             HeaderType::Validate => Header::Validate,
             HeaderType::Chunk => {
@@ -80,31 +113,24 @@ where
         };
         Ok(header)
     }
+    
+    pub async fn read_response(&mut self) -> Result<Response, E> {
+        self.sync().await?;
 
-    pub async fn sync(&mut self) -> Result<Header, E> {
-        let mut magic_pos = 0;
-        loop {
-            let byte = self.read_byte().await?;
-            if byte == MAGIC[magic_pos] {
-                magic_pos += 1;
-                if magic_pos == MAGIC.len() {
-                    return self.read_header().await;
-                }
-            } else {
-                magic_pos = 0;
-            }
-        }
+        let response = Response::from(self.read_byte().await?);
+
+        Ok(response)
     }
 }
 
-pub struct HeaderSerializer<F, E>
+pub struct Serializer<F, E>
 where
     F: AsyncFnMut(&[u8]) -> Result<(), E>,
 {
     write_buf: F,
 }
 
-impl<F, E> HeaderSerializer<F, E>
+impl<F, E> Serializer<F, E>
 where
     F: AsyncFnMut(&[u8]) -> Result<(), E>,
 {
@@ -148,4 +174,13 @@ where
         }
         Ok(())
     }
+
+    pub async fn write_response(&mut self, response: Response) -> Result<(), E> {
+        self.write(&MAGIC).await?;
+
+        self.write_byte(response.into()).await?;
+
+        Ok(())
+    }
 }
+
