@@ -5,7 +5,7 @@ use trex_firmware_transport::*;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use console::style;
 use object::{
     Endianness, Object, ObjectSegment,
@@ -100,7 +100,7 @@ pub fn print_size(elf: &[u8]) -> Result<()> {
 
 pub async fn flash_elf(
     elf: &[u8],
-    key: &[u8],
+    key: &[u8; 32],
     net_conf: &NetConf,
     flash_conf: &FlashConf,
     v: bool,
@@ -123,9 +123,9 @@ pub async fn flash_elf(
         style("[FLASH]").cyan()
     );
 
-    let key = embassy_crypto::ed25519::SigningKey::from_bytes(key.try_into().context("key has the wrong length")?);
-    let hash = embassy_crypto::Sha512::digest(&object);
-    let signature = key.sign(&hash).map_err(|_| anyhow!("could not sign hash"))?.to_bytes();
+    let keypair = salty::Keypair::from(key);
+    let hash = salty::Sha512::new().updated(&object).finalize();
+    let signature = keypair.sign(&hash).to_bytes();
 
     vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
 

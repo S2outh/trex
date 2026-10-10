@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 
 use trex_firmware_transport::*;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use console::style;
 
 #[macro_use]
@@ -49,7 +49,7 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<
 
     vprintln!(v, "{} Successfully loaded image", style("[RUN]").yellow());
 
-    flash::flash_elf(data.as_ref(), key.as_ref(), net_conf, flash_conf, v)
+    flash::flash_elf(data.as_slice(), key.as_slice().try_into()?, net_conf, flash_conf, v)
         .await
         .context("Failed to flash")?;
 
@@ -103,7 +103,7 @@ pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Resul
 
     vprintln!(v, "{} Successfully loaded image", style("[FLASH]").cyan());
 
-    flash::flash_elf(data.as_ref(), key.as_ref(), net_conf, flash_conf, v).await
+    flash::flash_elf(data.as_slice(), key.as_slice().try_into()?, net_conf, flash_conf, v).await
 }
 
 pub async fn size(path: PathBuf, v: bool) -> Result<()> {
@@ -172,9 +172,10 @@ pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
 
 pub async fn keygen(private_file: PathBuf, public_file: PathBuf, v: bool) -> Result<()> {
     vprintln!(v, "{} Generating keypair...", style("[KEYGEN]").cyan());
-    let key = embassy_crypto::ed25519::SigningKey::generate().map_err(|_| anyhow!("could not generate key"))?;
-    let private_key = key.to_bytes();
-    let public_key = key.verifying_key().map_err(|_| anyhow!("could not get public key"))?.to_bytes();
+    let mut private_key = [0u8; 32];
+    getrandom::fill(&mut private_key)?;
+    let keypair = salty::Keypair::from(&private_key);
+    let public_key = keypair.public.to_bytes();
 
     vprintln!(v, "{} Saving keypair...", style("[KEYGEN]").cyan());
     fs::write(private_file, private_key).context("could not create private key file")?;

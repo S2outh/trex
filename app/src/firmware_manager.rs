@@ -120,14 +120,11 @@ impl<'a> FirmwareManager<'a> {
 
                     defmt::info!("[FW MGR] Trying to apply new firmware...");
 
-                    const HASH_CHUNK_SIZE: usize = 64;
-                    let mut chunk_buf = AlignedBuffer([0u8; HASH_CHUNK_SIZE]);
                     if let Err(e) = self
                         .updater
-                        .verify_and_mark_updated::<embassy_crypto::Sha512, embassy_crypto::ed25519::VerifyingKey>(
-                            PUBLIC_KEY,
+                        .verify_and_mark_updated(
+                            PUBLIC_KEY.try_into().unwrap(),
                             &signature,
-                            chunk_buf.as_mut(),
                             size as u32,
                         ).await
                     {

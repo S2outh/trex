@@ -8,6 +8,8 @@ trex-firmware-transport.path = "../../crates/trex-firmware-transport"
 
 tokio = { workspace = true, features = ["io-util", "time", "net"] }
 
+salty = "0.3.0"
+getrandom = "0.4.3"
 
 clap.workspace = true
 anyhow.workspace = true

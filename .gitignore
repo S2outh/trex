@@ -2,4 +2,4 @@
 target/
 
 # secrets
-secrets/private.key
+private.key
