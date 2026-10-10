@@ -44,7 +44,7 @@ impl<'d, T: GeneralInstance4Channel, C: TimerChannel> StepInterface<'d, T, C> {
         inner.enable_outputs();
 
         // Set master mode for counter (compare_pulse instead of update to mitigate x2 error)
-        inner.set_master_mode(MasterMode::UPDATE);
+        inner.set_master_mode(MasterMode::Update);
 
         // Initialize timer output
         inner.set_output_compare_mode(C::CHANNEL, OutputCompareMode::Toggle);

@@ -3,23 +3,25 @@
 
 use core::net::{Ipv4Addr, SocketAddr};
 
+use embassy_crypto_rustcrypto as _;
+
 use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_nats::UserPwdAuthenticator;
-use embassy_net::dns::DnsQueryType;
-use embassy_net::tcp::TcpSocket;
-use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
+use embassy_net::dns::{DnsQueryType, IpAddr};
+use embassy_net::tcp::{TcpListener, TcpSocket};
+use embassy_net::wire::IpCidr;
+use embassy_net::{Stack, StackStorage, StaticPool};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
 use embassy_stm32::gpio::{Output, Speed};
-use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG, TIM23, TIM24};
+use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG, TIM23, TIM4};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::timer::low_level::TriggerSource;
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::{Config, gpio::Level};
 use embassy_stm32::{bind_interrupts, rcc, rng};
 use embassy_time::Timer;
-use heapless::Vec;
 use static_cell::StaticCell;
 
 use crate::control_loop::ControlLoop;
@@ -47,11 +49,9 @@ mod tm_loop;
 const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
 const WATCHDOG_PETTING_INTERVAL_US: u32 = WATCHDOG_TIMEOUT_US / 2;
 
-const IP_CONFIG: StaticConfigV4 = StaticConfigV4 {
-    address: Ipv4Cidr::new(Ipv4Addr::new(192, 168, 0, 10), 24),
-    gateway: None,
-    dns_servers: Vec::from_array([Ipv4Addr::new(192, 168, 0, 1)]),
-};
+const IP_CIDR: IpCidr = IpCidr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 10)), 24);
+const GATEWAY: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 1);
+const DNS_SERVER: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1));
 
 const LOGGER_PORT: u16 = 3001;
 
@@ -63,9 +63,14 @@ static FIRMWARE_STORAGE: StaticCell<FirmwareManagerStorage> = StaticCell::new();
 // Ethernet
 // queues for raw packets before and after processing
 static PACKET_QUEUE: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
-// resources to hold the sockets used by the net driver.
-// One for DHCP/DNS, One for Flashing, one for Logging and one for NATS
-static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
+// Statically allocated pool
+static POOL: StaticPool = StaticPool::new();
+// Storage holding the stack information at runtime
+static STACK: StaticCell<StackStorage> = StaticCell::new();
+
+// Ethernet device storage
+type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
+static DEVICE: StaticCell<EthDevice> = StaticCell::new();
 
 // buffer sizes for tcp data before and after processing
 static NATS_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
@@ -99,38 +104,37 @@ const EL_STEPPS_PER_REV: u32 = 24_000;
 const EL_MAX_SPEED: f64 = 1.1; // rad/s
 const EL_ACCELERATION: f64 = 0.8; // rad/s^2
 
-type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
 bind_interrupts!(struct Irqs {
-    ETH => eth::InterruptHandler;
+    ETH => eth::InterruptHandler<ETH>;
     FLASH => flash::InterruptHandler;
     RNG => rng::InterruptHandler<RNG>;
+    TIM4 => step_counter::InterruptHandler<TIM4>;
     TIM23 => step_counter::InterruptHandler<TIM23>;
-    TIM24 => step_counter::InterruptHandler<TIM24>;
 });
 
 fn get_rcc_config() -> rcc::Config {
     let mut rcc_config = rcc::Config::default();
-    rcc_config.hsi = Some(rcc::HSIPrescaler::DIV1); // 64 MHz
+    rcc_config.hsi = Some(rcc::HSIPrescaler::Div1); // 64 MHz
     rcc_config.hsi48 = Some(Default::default()); // needed for RNG
 
     rcc_config.pll1 = Some(rcc::Pll {
-        source: rcc::PllSource::HSI,
-        prediv: rcc::PllPreDiv::DIV4,  // 16 MHz
-        mul: rcc::PllMul::MUL30,       // 480 MHz
-        divp: Some(rcc::PllDiv::DIV2), // 240 MHz
-        divq: Some(rcc::PllDiv::DIV8), // 60 MHz
-        divr: Some(rcc::PllDiv::DIV8), // 60 MHz
+        source: rcc::PllSource::Hsi,
+        prediv: rcc::PllPreDiv::Div4,  // 16 MHz
+        mul: rcc::PllMul::Mul30,       // 480 MHz
+        divp: Some(rcc::PllDiv::Div2), // 240 MHz
+        divq: Some(rcc::PllDiv::Div8), // 60 MHz
+        divr: Some(rcc::PllDiv::Div8), // 60 MHz
     });
-    rcc_config.sys = rcc::Sysclk::PLL1_P; // cpu runns with 240 MHz
+    rcc_config.sys = rcc::Sysclk::Pll1P; // cpu runns with 240 MHz
 
     rcc_config.voltage_scale = rcc::VoltageScale::Scale2; // voltage scale for max 300 MHz Pll out
 
-    rcc_config.ahb_pre = rcc::AHBPrescaler::DIV2; // AHB runns at 120 MHz (src: sysclk)
-    rcc_config.apb1_pre = rcc::APBPrescaler::DIV2; // APB 1-4 all run with 60 MHz (src: ahb)
-    rcc_config.apb2_pre = rcc::APBPrescaler::DIV2;
-    rcc_config.apb3_pre = rcc::APBPrescaler::DIV2;
-    rcc_config.apb4_pre = rcc::APBPrescaler::DIV2;
+    rcc_config.ahb_pre = rcc::AHBPrescaler::Div2; // AHB runns at 120 MHz (src: sysclk)
+    rcc_config.apb1_pre = rcc::APBPrescaler::Div2; // APB 1-4 all run with 60 MHz (src: ahb)
+    rcc_config.apb2_pre = rcc::APBPrescaler::Div2;
+    rcc_config.apb3_pre = rcc::APBPrescaler::Div2;
+    rcc_config.apb4_pre = rcc::APBPrescaler::Div2;
 
     rcc_config
 }
@@ -155,7 +159,7 @@ pub async fn tm_task(mut tm_loop: TMLoop<'static>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, EthDevice>) -> ! {
+async fn net_task(mut runner: embassy_net::Runner<'static>) -> ! {
     runner.run().await
 }
 
@@ -200,6 +204,9 @@ async fn main(spawner: Spawner) {
     let mut watchdog = IndependentWatchdog::new(p.IWDG1, WATCHDOG_TIMEOUT_US);
     watchdog.unleash();
 
+    // Launch watchdog task
+    spawner.spawn(petter(watchdog).unwrap());
+
     // Initialize ethernet
     let eth_int = p.ETH;
     let ref_clk = p.PA1;
@@ -219,11 +226,11 @@ async fn main(spawner: Spawner) {
     let mut rng = Rng::new(p.RNG, Irqs);
 
     let mut seed = [0; 8];
-    rng.fill_bytes(&mut seed);
+    rng.fill_bytes(&mut seed).await.unwrap();
     let seed = u64::from_le_bytes(seed);
 
     let mut mac_addr = [0; 6];
-    rng.fill_bytes(&mut mac_addr);
+    rng.fill_bytes(&mut mac_addr).await.unwrap();
     // make sure mac addr is unicast
     mac_addr[0] &= !1;
 
@@ -231,7 +238,6 @@ async fn main(spawner: Spawner) {
     let device = Ethernet::new(
         PACKET_QUEUE.init(PacketQueue::<4, 4>::new()),
         eth_int,
-        Irqs,
         ref_clk,
         crs,
         rx_d0,
@@ -243,22 +249,24 @@ async fn main(spawner: Spawner) {
         sma,
         mdio,
         mdc,
+        Irqs,
     );
-
-    let net_cfg = embassy_net::Config::ipv4_static(IP_CONFIG);
 
     // Initialize network stack
     info!("Initializing network task");
     let (stack, runner) =
-        embassy_net::new(device, net_cfg, RESOURCES.init(StackResources::new()), seed);
+        embassy_net::Stack::new(STACK.init(StackStorage::new()), &POOL, seed);
 
-    // Launch watchdog task
-    spawner.spawn(petter(watchdog).unwrap());
+    let iface = stack.add_iface_borrowed(DEVICE.init(device)).unwrap();
+    
+    iface.add_ip_addr(IP_CIDR).unwrap();
+    stack.routes().add_default_ipv4_route(GATEWAY, iface.handle()).unwrap();
+    stack.set_dns_servers(&[DNS_SERVER]);
 
     // Launch network task
     spawner.spawn(net_task(runner).unwrap());
 
-    stack.wait_config_up().await;
+    iface.wait_link_up().await;
 
     info!("Network initialized");
 
@@ -267,10 +275,13 @@ async fn main(spawner: Spawner) {
         stack,
         LOG_TCP_RX_BUF.init([0; _]),
         LOG_TCP_TX_BUF.init([0; _]),
-    );
+    ).unwrap();
+
+    let mut listener = TcpListener::new(stack).unwrap();
+    listener.listen(LOGGER_PORT).unwrap();
 
     // Initialize logger
-    let runner = TcpLogger::new(socket, LOGGER_PORT);
+    let runner = TcpLogger::new(listener, socket);
 
     // launch logger task
     spawner.spawn(logger_task(runner).unwrap());
@@ -280,12 +291,15 @@ async fn main(spawner: Spawner) {
         stack,
         UPD_TCP_RX_BUF.init([0; _]),
         UPD_TCP_TX_BUF.init([0; _]),
-    );
+    ).unwrap();
+
+    let mut listener = TcpListener::new(stack).unwrap();
+    listener.listen(FIRMWARE_UPDATE_PORT).unwrap();
 
     // Initialize firmware manager
     let flash = Flash::new(p.FLASH, Irqs);
     let storage = FIRMWARE_STORAGE.init(FirmwareManagerStorage::new(flash).await);
-    let runner = FirmwareManager::new(storage, socket, FIRMWARE_UPDATE_PORT).await;
+    let runner = FirmwareManager::new(storage, listener, socket).await;
 
     // launch firmware manager task
     spawner.spawn(firmware_manager_task(runner).unwrap());
@@ -295,7 +309,7 @@ async fn main(spawner: Spawner) {
         stack,
         NATS_TCP_RX_BUF.init([0; _]),
         NATS_TCP_TX_BUF.init([0; _]),
-    );
+    ).unwrap();
 
     // resolve nats addr
     let socket_addr = loop {
@@ -326,8 +340,8 @@ async fn main(spawner: Spawner) {
     let enable = Output::new(p.PE10, Level::Low, Speed::Medium);
 
     let step_interface = StepInterface::new(p.TIM3, step);
-    // In the stm32 interconnection matrix TIM3 is ITR2 to TIM24
-    let step_counter = StepCounter::new(p.TIM24, TriggerSource::ITR2, Irqs);
+    // In the stm32 interconnection matrix TIM3 is ITR2 to TIM4
+    let step_counter = StepCounter::new(p.TIM4, TriggerSource::Itr2, Irqs);
     let azimut_stepper = Stepper::new(step_interface, step_counter, dir, enable, AZ_STEPPS_PER_REV);
 
     // Elevation stepper setup
@@ -337,7 +351,7 @@ async fn main(spawner: Spawner) {
 
     let step_interface = StepInterface::new(p.TIM2, step);
     // In the stm32 interconnection matrix TIM2 is ITR1 to TIM23
-    let step_counter = StepCounter::new(p.TIM23, TriggerSource::ITR1, Irqs);
+    let step_counter = StepCounter::new(p.TIM23, TriggerSource::Itr1, Irqs);
     let elevation_stepper =
         Stepper::new(step_interface, step_counter, dir, enable, EL_STEPPS_PER_REV);
 

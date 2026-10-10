@@ -4,7 +4,7 @@ use core::{
 };
 
 use critical_section::RestoreState;
-use embassy_net::tcp::{self, TcpSocket};
+use embassy_net::tcp::{self, TcpListener, TcpSocket};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pipe::Pipe};
 use embassy_time::Duration;
 use portable_atomic::AtomicU32;
@@ -151,13 +151,13 @@ impl TcpEncoder {
 }
 
 pub struct TcpLogger<'a> {
-    socket: TcpSocket<'a>,
-    port: u16,
+    listener: TcpListener<'a>,
+    socket: TcpSocket<'a, 'a>,
 }
 
 impl<'a> TcpLogger<'a> {
-    pub fn new(socket: TcpSocket<'a>, port: u16) -> Self {
-        Self { socket, port }
+    pub fn new(listener: TcpListener<'a>, socket: TcpSocket<'a, 'a>) -> Self {
+        Self { listener, socket }
     }
 
     async fn write_buf(&mut self, mut buf: &[u8]) -> Result<(), tcp::Error> {
@@ -201,7 +201,10 @@ impl<'a> TcpLogger<'a> {
         self.socket.set_keep_alive(Some(Duration::from_secs(5)));
         self.socket.set_timeout(Some(Duration::from_secs(6)));
         loop {
-            if self.socket.accept(self.port).await.is_err() {
+            let Ok(token) = self.listener.accept().await else {
+                continue;
+            };
+            if self.socket.accept(token).await.is_err() {
                 self.disconnect().await;
                 continue;
             }

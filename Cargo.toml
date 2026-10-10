@@ -11,13 +11,13 @@ edition = "2024"
 [workspace.dependencies]
 
 # Embedded
-embassy-stm32 = { version = "0.6.0", features = [ "time", "time-driver-any", "stm32h723vg", "unstable-pac", "exti"]  }
-embassy-sync = { version = "0.8.0" }
-embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
-embassy-time = { version = "0.5.1", features = ["defmt-timestamp-uptime", "tick-hz-1_000_000"] }
-embassy-futures = { version = "0.1.2" }
+embassy-stm32 = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto", features = [ "time", "time-driver-any", "stm32h723vg", "unstable-pac", "exti"]  }
+embassy-sync = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
+embassy-executor = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto", features = ["platform-cortex-m", "executor-thread"] }
+embassy-time = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto", features = ["defmt-timestamp-uptime", "tick-hz-1_000_000"] }
+embassy-futures = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
 
-embassy-boot-stm32 = { version = "0.8.0" }
+embassy-boot-stm32 = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
 
 cortex-m = { version = "0.7.9", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.7"
@@ -27,6 +27,9 @@ defmt = "1.1"
 south-common = { git = "https://github.com/S2outh/south-common.git", features = ["serde"] }
 
 # Common
+embassy-crypto = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
+embassy-crypto-rand = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
+embassy-crypto-rustcrypto = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto", features = ["embassy-crypto-sha512", "embassy-crypto-ed25519"] }
 
 serde = { version = "1.0.229", default-features = false, features = ["derive"] }
 minicbor-serde = { version = "0.7.1" }

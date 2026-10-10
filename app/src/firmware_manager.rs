@@ -1,6 +1,6 @@
 use embassy_boot_stm32::{AlignedBuffer, FirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_futures::yield_now;
-use embassy_net::tcp::{self, TcpSocket};
+use embassy_net::tcp::{self, TcpListener, TcpSocket};
 use embassy_stm32::flash::{Async, Flash, WRITE_SIZE};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use trex_firmware_transport::*;
@@ -29,16 +29,16 @@ impl<'a> FirmwareManagerStorage<'a> {
 
 pub struct FirmwareManager<'a> {
     updater: FirmwareUpdater<'a, Partition<'a>, Partition<'a>>,
-    socket: TcpSocket<'a>,
-    port: u16,
+    listener: TcpListener<'a>,
+    socket: TcpSocket<'a, 'a>,
     validated: bool,
 }
 
 impl<'a> FirmwareManager<'a> {
     pub async fn new(
         storage: &'a mut FirmwareManagerStorage<'a>,
-        socket: TcpSocket<'a>,
-        port: u16,
+        listener: TcpListener<'a>,
+        socket: TcpSocket<'a, 'a>,
     ) -> Self {
         let config = FirmwareUpdaterConfig::from_linkerfile(&storage.flash, &storage.flash);
         let mut updater = FirmwareUpdater::new(config, &mut storage.magic.0);
@@ -57,8 +57,8 @@ impl<'a> FirmwareManager<'a> {
 
         Self {
             updater,
+            listener,
             socket,
-            port,
             validated,
         }
     }
@@ -151,7 +151,10 @@ impl<'a> FirmwareManager<'a> {
     pub async fn run(&mut self) -> ! {
         loop {
             defmt::info!("[FW MGR] Waiting for connections...");
-            if self.socket.accept(self.port).await.is_err() {
+            let Ok(token) = self.listener.accept().await else {
+                continue;
+            };
+            if self.socket.accept(token).await.is_err() {
                 self.disconnect().await;
                 continue;
             }

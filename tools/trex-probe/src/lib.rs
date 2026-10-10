@@ -1,5 +1,8 @@
 use std::{fs, path::PathBuf, time::Duration};
 
+use embassy_crypto_rustcrypto as _;
+use embassy_crypto_rand as _;
+
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;

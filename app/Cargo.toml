@@ -17,6 +17,9 @@ cortex-m-rt.workspace = true
 
 embassy-boot-stm32 = { workspace = true, features = ["defmt"] }
 
+embassy-crypto.workspace = true
+embassy-crypto-rustcrypto.workspace = true
+
 defmt.workspace = true
 
 serde.workspace = true
@@ -30,11 +33,13 @@ nalgebra.workspace = true
 static_cell = { version = "2.1.1", features = ["nightly"] }
 
 embedded-storage-async = "0.4.2"
-embassy-embedded-hal = "0.6.0"
 
-embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }
+embassy-embedded-hal = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto" }
 
-embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt"] }
+embassy-net = { git = "https://github.com/Eleocraft/embassy.git", branch = "embassy_boot_crypto", features = ["tcp", "tcp-listener", "defmt", "dns", "medium-ethernet", "dhcpv4", "ipv4", "ipv6" ] }
+
+embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", branch = "unstable-embassy", features = ["defmt"] }
+
 portable-atomic = { version = "1.15.0", features = ["float"] }
 heapless = "0.9.3"
 critical-section = "1.2.0"

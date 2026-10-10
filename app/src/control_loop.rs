@@ -19,7 +19,7 @@ use crate::{NATS_NUM_SUBS, NatsCollections, control_loop::axis::Axis};
 type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
 type NatsMsg = embassy_nats::NatsMsg<NatsCollections>;
 
-type AzimutAxis<'a> = Axis<'a, peripherals::TIM3, peripherals::TIM24, timer::Ch3>;
+type AzimutAxis<'a> = Axis<'a, peripherals::TIM3, peripherals::TIM4, timer::Ch3>;
 type ElevationAxis<'a> = Axis<'a, peripherals::TIM2, peripherals::TIM23, timer::Ch1>;
 
 const NATS_MSG_CHANNEL_SIZE: usize = 10;

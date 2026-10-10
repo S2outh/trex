@@ -8,6 +8,9 @@ trex-firmware-transport.path = "../../crates/trex-firmware-transport"
 
 tokio = { workspace = true, features = ["io-util", "time", "net"] }
 
+embassy-crypto.workspace = true
+embassy-crypto-rand.workspace = true
+embassy-crypto-rustcrypto.workspace = true
 
 clap.workspace = true
 anyhow.workspace = true
