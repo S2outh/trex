@@ -113,7 +113,7 @@ where
         };
         Ok(header)
     }
-    
+
     pub async fn read_response(&mut self) -> Result<Response, E> {
         self.sync().await?;
 
@@ -183,4 +183,3 @@ where
         Ok(())
     }
 }
-

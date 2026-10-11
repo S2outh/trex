@@ -101,7 +101,8 @@ impl<'a> FirmwareManager<'a> {
     async fn respond(&mut self, response: Response) -> Result<(), tcp::Error> {
         if let Err(e) = Serializer::new(async |a| self.write_all(a).await)
             .write_response(response)
-            .await {
+            .await
+        {
             defmt::error!("could not send response: {}", e);
         }
         Ok(())
@@ -125,7 +126,7 @@ impl<'a> FirmwareManager<'a> {
                             return;
                         }
                     }
-                },
+                }
                 Header::Chunk { offset, size } => {
                     defmt::info!(
                         "[FW MGR] Received chunk, offset: {}, size: {}",
@@ -161,7 +162,8 @@ impl<'a> FirmwareManager<'a> {
                             PUBLIC_KEY.try_into().unwrap(),
                             &signature,
                             size as u32,
-                        ).await
+                        )
+                        .await
                     {
                         defmt::error!("[FW MGR] Could not verify firmware: {}", e);
                         if self.respond(Response::Fail).await.is_err() {

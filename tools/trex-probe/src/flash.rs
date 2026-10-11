@@ -3,7 +3,7 @@ use trex_firmware_transport::*;
 use tokio::io::AsyncWriteExt;
 
 use anyhow::{Context, Result, bail};
-use console::style;
+use console::{StyledObject, style};
 use object::{
     Endianness, Object, ObjectSegment,
     read::elf::{ElfFile32, ProgramHeader},
@@ -85,24 +85,25 @@ fn validate_object(base: u64, size: usize, flash_conf: &FlashConf) -> Result<()>
     Ok(())
 }
 
-pub fn print_size(elf: &[u8]) -> Result<()> {
+pub fn print_size<D: std::fmt::Display>(elf: &[u8], prefix: &StyledObject<D>) -> Result<()> {
     let (_, object) = elf_objectcopy(elf).context("Failed to load image")?;
 
     let size = object.len();
     println!(
         "{} Size of binary: {} {}",
-        style("[SIZE]").cyan(),
+        prefix,
         style(indicatif::HumanBytes(size as u64)).bold().red(),
         style(&format!("({})", indicatif::DecimalBytes(size as u64))).dim(),
     );
     Ok(())
 }
 
-pub async fn flash_elf(
+pub async fn flash_elf<D: std::fmt::Display>(
     elf: &[u8],
     key: &[u8; 32],
     net_conf: &NetConf,
     flash_conf: &FlashConf,
+    prefix: &StyledObject<D>,
     v: bool,
 ) -> Result<()> {
     let (base, object) = elf_objectcopy(elf).context("Failed to load image")?;
@@ -110,33 +111,28 @@ pub async fn flash_elf(
     let size = object.len();
     println!(
         "{} Size of binary: {} {}",
-        style("[FLASH]").cyan(),
+        prefix,
         style(indicatif::HumanBytes(size as u64)).bold().red(),
         style(&format!("({})", indicatif::DecimalBytes(size as u64))).dim(),
     );
 
     validate_object(base, size, flash_conf).context("ELF validation failed")?;
 
-    vprintln!(
-        v,
-        "{} Successfully validated image",
-        style("[FLASH]").cyan()
-    );
+    vprintln!(v, "{} Successfully validated image", prefix);
 
     let keypair = salty::Keypair::from(key);
     let hash = salty::Sha512::new().updated(&object).finalize();
     let signature = keypair.sign(&hash).to_bytes();
 
-    vprintln!(v, "{} Connecting to target...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Connecting to target...", prefix);
 
-    let mut tcp = utils::connect_loading(net_conf, style("[FLASH]").cyan()).await?;
+    let mut tcp = utils::connect_loading(net_conf, &prefix).await?;
 
-    vprintln!(v, "{} Sending firmware...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Sending firmware...", prefix);
 
-    let progress_style =
-        ProgressStyle::with_template(&format!("{} {}", style("[FLASH]").cyan(), PR_TEMPLATE))
-            .unwrap()
-            .progress_chars(PR_CHARS);
+    let progress_style = ProgressStyle::with_template(&format!("{} {}", prefix, PR_TEMPLATE))
+        .unwrap()
+        .progress_chars(PR_CHARS);
 
     for (i, chunk) in object
         .chunks(CHUNK_SIZE)
@@ -153,16 +149,18 @@ pub async fn flash_elf(
         tcp.write_all(chunk).await.context("could not send chunk")?;
     }
 
-    vprintln!(v, "{} Applying firmware...", style("[FLASH]").cyan());
+    vprintln!(v, "{} Applying firmware...", prefix);
 
     Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Apply { size, signature })
         .await
         .context("could not send header")?;
 
-    utils::await_response(&mut tcp).await.context("apply failed")?;
+    utils::await_response(&mut tcp)
+        .await
+        .context("apply failed")?;
 
-    vprintln!(v, "{} Done!", style("[FLASH]").cyan());
+    vprintln!(v, "{} Done!", prefix);
 
     Ok(())
 }

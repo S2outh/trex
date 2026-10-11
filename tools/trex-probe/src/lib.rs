@@ -36,27 +36,31 @@ pub struct FlashConf {
 }
 
 pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Loading image", style("[RUN]").yellow());
+    let prefix = style("[RUN]").cyan();
+    vprintln!(v, "{} Loading image", prefix);
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
     let key = fs::read(flash_conf.key.clone()).context("Failed to load key")?;
 
-    vprintln!(v, "{} Successfully loaded image", style("[RUN]").yellow());
+    vprintln!(v, "{} Successfully loaded image", prefix);
 
-    flash::flash_elf(data.as_slice(), key.as_slice().try_into()?, net_conf, flash_conf, v)
-        .await
-        .context("Failed to flash")?;
+    flash::flash_elf(
+        data.as_slice(),
+        key.as_slice().try_into()?,
+        net_conf,
+        flash_conf,
+        &prefix,
+        v,
+    )
+    .await
+    .context("Failed to flash")?;
 
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     validate(net_conf, v).await.context("Validation failed")?;
 
-    vprintln!(v, "{} Launching defmt logger...", style("[RUN]").yellow());
-    vprintln!(
-        v,
-        "{}",
-        style("----------------------------------").yellow()
-    );
+    vprintln!(v, "{} Launching defmt logger...", prefix);
+    vprintln!(v, "{}", style("----------------------------------").red());
 
     logger::run(data.as_ref(), net_conf)
         .await
@@ -64,25 +68,14 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<
 }
 
 pub async fn attach(net_conf: &NetConf, path: PathBuf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Loading image", style("[Attach]").yellow());
+    let prefix = style("[Attach]").yellow();
+    vprintln!(v, "{} Loading image", prefix);
 
     let data = fs::read(path).context("Failed to load image")?;
 
-    vprintln!(
-        v,
-        "{} Successfully loaded image",
-        style("[Attach]").yellow()
-    );
-    vprintln!(
-        v,
-        "{} Launching defmt logger...",
-        style("[Attach]").yellow()
-    );
-    vprintln!(
-        v,
-        "{}",
-        style("----------------------------------").yellow()
-    );
+    vprintln!(v, "{} Successfully loaded image", prefix);
+    vprintln!(v, "{} Launching defmt logger...", prefix);
+    vprintln!(v, "{}", style("----------------------------------").red());
 
     logger::run(data.as_ref(), net_conf)
         .await
@@ -90,77 +83,90 @@ pub async fn attach(net_conf: &NetConf, path: PathBuf, v: bool) -> Result<()> {
 }
 
 pub async fn flash(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Loading image", style("[FLASH]").cyan());
+    let prefix = style("[FLASH]").cyan();
+    vprintln!(v, "{} Loading image", prefix);
 
     let data = fs::read(flash_conf.path.clone()).context("Failed to load image")?;
     let key = fs::read(flash_conf.key.clone()).context("Failed to load key")?;
 
-    vprintln!(v, "{} Successfully loaded image", style("[FLASH]").cyan());
+    vprintln!(v, "{} Successfully loaded image", prefix);
 
-    flash::flash_elf(data.as_slice(), key.as_slice().try_into()?, net_conf, flash_conf, v).await
+    flash::flash_elf(
+        data.as_slice(),
+        key.as_slice().try_into()?,
+        net_conf,
+        flash_conf,
+        &prefix,
+        v,
+    )
+    .await
 }
 
 pub async fn size(path: PathBuf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Loading image", style("[SIZE]").blue());
+    let prefix = style("[SIZE]").blue();
+    vprintln!(v, "{} Loading image", prefix);
 
     let data = fs::read(path).context("Failed to load image")?;
 
-    vprintln!(v, "{} Successfully loaded image", style("[SIZE]").blue());
+    vprintln!(v, "{} Successfully loaded image", prefix);
 
-    flash::print_size(data.as_ref())
+    flash::print_size(data.as_ref(), &prefix)
 }
 
 pub async fn validate(net_conf: &NetConf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Connecting to target...", style("[VALIDATE]").green());
+    let prefix = style("[VALIDATE]").green();
+    vprintln!(v, "{} Connecting to target...", prefix);
 
-    let mut tcp = utils::connect_loading(net_conf, style("[VALIDATE]").green()).await?;
+    let mut tcp = utils::connect_loading(net_conf, &prefix).await?;
 
-    vprintln!(
-        v,
-        "{} Sending validation request...",
-        style("[VALIDATE]").green()
-    );
+    vprintln!(v, "{} Sending validation request...", prefix);
 
     Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Validate)
         .await
         .context("could not send header")?;
 
-    utils::await_response(&mut tcp).await.context("validation failed")?;
+    utils::await_response(&mut tcp)
+        .await
+        .context("validation failed")?;
 
-    vprintln!(v, "{} Done!", style("[VALIDATE]").green());
+    vprintln!(v, "{} Done!", prefix);
 
     Ok(())
 }
 
 pub async fn reset(net_conf: &NetConf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Connecting to target...", style("[RESET]").red());
+    let prefix = style("[RESET]").red();
+    vprintln!(v, "{} Connecting to target...", prefix);
 
-    let mut tcp = utils::connect_loading(net_conf, style("[RESET]").red()).await?;
+    let mut tcp = utils::connect_loading(net_conf, &prefix).await?;
 
-    vprintln!(v, "{} Sending reset request...", style("[RESET]").red());
+    vprintln!(v, "{} Sending reset request...", prefix);
 
     Serializer::new(async |a| tcp.write_all(a).await)
         .write_header(Header::Reset)
         .await
         .context("could not send header")?;
 
-    utils::await_response(&mut tcp).await.context("reset failed")?;
+    utils::await_response(&mut tcp)
+        .await
+        .context("reset failed")?;
 
-    vprintln!(v, "{} Done!", style("[RESET]").red());
+    vprintln!(v, "{} Done!", prefix);
 
     Ok(())
 }
 
 pub async fn keygen(private_file: PathBuf, public_file: PathBuf, v: bool) -> Result<()> {
-    vprintln!(v, "{} Generating keypair...", style("[KEYGEN]").magenta());
+    let prefix = style("[RESET]").red();
+    vprintln!(v, "{} Generating keypair...", prefix);
 
     let mut private_key = [0u8; 32];
     getrandom::fill(&mut private_key)?;
     let keypair = salty::Keypair::from(&private_key);
     let public_key = keypair.public.to_bytes();
 
-    vprintln!(v, "{} Saving keypair...", style("[KEYGEN]").magenta());
+    vprintln!(v, "{} Saving keypair...", prefix);
 
     fs::write(private_file, private_key).context("could not create private key file")?;
     fs::write(public_file, public_key).context("could not create public key file")?;

@@ -81,7 +81,7 @@ impl<'a> ControlLoop<'a> {
                         new_target.y
                     );
                     *target = new_target;
-                },
+                }
                 _ => todo!(),
             },
             Err(e) => defmt::warn!("[CTRL] could not decode cmd: {}", defmt::Debug2Format(&e)),
