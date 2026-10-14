@@ -3,7 +3,7 @@ use embassy_stm32::timer::{GeneralInstance4Channel, TimerChannel};
 mod ramp_controller;
 
 use crate::{
-    control_loop::axis::ramp_controller::TrapezoidRampController, drivers::stepper::Stepper,
+    control_loop::axis::ramp_controller::TrapezoidRampController, drivers::stepper::{Stepper, step_counter::CounterInstance},
 };
 
 pub struct AxisState {
@@ -14,7 +14,7 @@ pub struct AxisState {
 pub struct Axis<'d, T, TC, C>
 where
     T: GeneralInstance4Channel,
-    TC: GeneralInstance4Channel,
+    TC: CounterInstance,
     C: TimerChannel,
 {
     stepper: Stepper<'d, T, TC, C>,
@@ -29,7 +29,7 @@ const ANGLE_LIMITS: f64 = core::f64::consts::PI;
 impl<'d, T, TC, C> Axis<'d, T, TC, C>
 where
     T: GeneralInstance4Channel,
-    TC: GeneralInstance4Channel,
+    TC: CounterInstance,
     C: TimerChannel,
 {
     pub fn new(stepper: Stepper<'d, T, TC, C>, max_speed: f64, acceleration: f64) -> Self {

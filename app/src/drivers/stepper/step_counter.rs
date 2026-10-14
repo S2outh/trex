@@ -2,7 +2,8 @@ use core::{marker::PhantomData, sync::atomic::Ordering};
 
 use embassy_stm32::{
     Peri,
-    interrupt::typelevel::{Binding, Handler},
+    peripherals,
+    interrupt::typelevel::{Interrupt, Binding, Handler},
     pac::timer::TimCore,
     timer::{
         GeneralInstance4Channel,
@@ -14,11 +15,11 @@ use portable_atomic::AtomicU16;
 use super::Dir;
 
 // The interrupt handler for overflow counting (and handeling)
-pub struct InterruptHandler<T: GeneralInstance4Channel> {
+pub struct InterruptHandler<T: CounterInstance> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: GeneralInstance4Channel> Handler<T::UpdateInterrupt> for InterruptHandler<T> {
+impl<T: CounterInstance> Handler<T::UpdateInterrupt> for InterruptHandler<T> {
     unsafe fn on_interrupt() {
         // SAFETY: T::regs() is this timers block, TimCore is the register subset
         // common to every type of timer, so this timer is guaranteed to have it
@@ -47,27 +48,57 @@ impl CounterState {
     }
 }
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 // Trait for each timer instance that can act as counter
-trait CounterInstance {
+pub trait CounterInstance: GeneralInstance4Channel + sealed::Sealed {
+    #[allow(private_interfaces)]
     fn state() -> &'static CounterState;
 }
 
-impl<T: GeneralInstance4Channel> CounterInstance for T {
-    fn state() -> &'static CounterState {
-        static STATE: CounterState = CounterState::new();
-        &STATE
-    }
+macro_rules! impl_counter_instance {
+    ($inst: ident) => {
+        impl sealed::Sealed for peripherals::$inst {}
+        #[allow(private_interfaces)]
+        impl CounterInstance for peripherals::$inst {
+            fn state() -> &'static CounterState {
+                static STATE: CounterState = CounterState::new();
+                &STATE
+            }
+        }
+    };
 }
 
+// Only implementing for the h723 timers, not device agnostic
+impl_counter_instance!(TIM1);
+impl_counter_instance!(TIM2);
+impl_counter_instance!(TIM3);
+impl_counter_instance!(TIM4);
+impl_counter_instance!(TIM5);
+
+impl_counter_instance!(TIM8);
+
+impl_counter_instance!(TIM12);
+impl_counter_instance!(TIM13);
+impl_counter_instance!(TIM14);
+impl_counter_instance!(TIM15);
+impl_counter_instance!(TIM16);
+impl_counter_instance!(TIM17);
+
+impl_counter_instance!(TIM23);
+impl_counter_instance!(TIM24);
+
 // actual public facing step counter interface
-pub struct StepCounter<'d, T: GeneralInstance4Channel> {
+pub struct StepCounter<'d, T: CounterInstance> {
     inner: Timer<'d, T>,
     dir: Dir,
     pos: i32,
     last_cnt: i32,
 }
 
-impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
+impl<'d, T: CounterInstance> StepCounter<'d, T> {
     pub fn new(
         tim: Peri<'d, T>,
         trigger: TriggerSource,
@@ -84,8 +115,10 @@ impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
         inner.regs_gp16().psc().write_value(0);
         inner.regs_gp16().arr().write(|r| r.set_arr(u16::MAX));
 
-        // set interrupt
-        inner.enable_update_interrupt(true);
+        // Enable interrupt
+        inner.enable_update_interrupt(true); // in timer
+        T::UpdateInterrupt::unpend(); // remove pending bit
+        unsafe { T::UpdateInterrupt::enable(); } // in nvic
 
         // Apply and start
         inner.generate_update_event();
@@ -102,6 +135,7 @@ impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
     fn update_pos(&mut self) {
         // wrapping these in a CS in order to mitigate potential issues
         // if overflow happens between the swap and the read
+        // TODO when overflow happens and dir is switched between two updates this still breaks
         let (overflows, cnt) = critical_section::with(|_| {
             (
                 T::state().overflows.swap(0, Ordering::SeqCst) as i32,

@@ -9,7 +9,7 @@ use embassy_stm32::{
 pub mod step_counter;
 pub mod step_interface;
 
-use crate::drivers::stepper::{step_counter::StepCounter, step_interface::StepInterface};
+use crate::drivers::stepper::{step_counter::{CounterInstance, StepCounter}, step_interface::StepInterface};
 
 // A direction enum representing clockwise and counterclockwise directions
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -44,7 +44,7 @@ impl Dir {
 
 // Interface to a closed loop stepper motor,
 // including step interface and step counter for accurate position estimation
-pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C> {
+pub struct Stepper<'d, T: GeneralInstance4Channel, TC: CounterInstance, C> {
     step_interface: StepInterface<'d, T, C>,
     step_counter: StepCounter<'d, TC>,
     dir_pin: Output<'d>,
@@ -54,7 +54,7 @@ pub struct Stepper<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, 
     angle_factor: f64,
 }
 
-impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChannel>
+impl<'d, T: GeneralInstance4Channel, TC: CounterInstance, C: TimerChannel>
     Stepper<'d, T, TC, C>
 {
     pub fn new(
@@ -105,7 +105,7 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChanne
 
     fn set_dir(&mut self, dir: f64) {
         self.dir = Dir::from_float(dir);
-        self.dir_pin.set_level(self.dir.level());
         self.step_counter.set_dir(self.dir);
+        self.dir_pin.set_level(self.dir.level());
     }
 }

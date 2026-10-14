@@ -92,11 +92,11 @@ static TM_CHANNEL: TMChannel = TMChannel::new();
 
 // Devices
 const AZ_STEPPS_PER_REV: u32 = 12_000;
-const AZ_MAX_SPEED: f64 = 0.2; // rad/s
-const AZ_ACCELERATION: f64 = 0.4; // rad/s^2
+const AZ_MAX_SPEED: f64 = 0.6; // rad/s
+const AZ_ACCELERATION: f64 = 0.6; // rad/s^2
 
 const EL_STEPPS_PER_REV: u32 = 24_000;
-const EL_MAX_SPEED: f64 = 0.3; // rad/s
+const EL_MAX_SPEED: f64 = 0.8; // rad/s
 const EL_ACCELERATION: f64 = 0.8; // rad/s^2
 
 type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
