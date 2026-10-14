@@ -29,7 +29,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    SetTarget(TargetArgs),
+    Set(TargetArgs),
+    Rotate(TargetArgs),
+    SetManual,
+    SetTracking,
     ReadTm,
 }
 
@@ -63,7 +66,17 @@ async fn main() -> Result<()> {
     println!("connected");
 
     match cli.command {
-        Commands::SetTarget(args) => {
+        Commands::Set(args) => {
+            let command = Command::Set(na::Vector2::new(args.az, args.el));
+
+            nats_client
+                .publish(
+                    defs::Command.address(),
+                    minicbor_serde::to_vec(&command)?.into(),
+                )
+                .await?;
+        },
+        Commands::Rotate(args) => {
             let command = Command::Rotate(na::Vector2::new(args.az, args.el));
 
             nats_client
@@ -72,7 +85,27 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
-        }
+        },
+        Commands::SetManual => {
+            let command = State::Manual;
+
+            nats_client
+                .publish(
+                    defs::ChangeState.address(),
+                    minicbor_serde::to_vec(&command)?.into(),
+                )
+                .await?;
+        },
+        Commands::SetTracking => {
+            let command = State::Tracking;
+
+            nats_client
+                .publish(
+                    defs::ChangeState.address(),
+                    minicbor_serde::to_vec(&command)?.into(),
+                )
+                .await?;
+        },
         Commands::ReadTm => {
             let mut sub = nats_client
                 .subscribe(format!("{}.>", defs::base_address()))

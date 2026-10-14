@@ -55,7 +55,7 @@ pub async fn run(net_conf: &NetConf, flash_conf: &FlashConf, v: bool) -> Result<
     .await
     .context("Failed to flash")?;
 
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     validate(net_conf, v).await.context("Validation failed")?;
 

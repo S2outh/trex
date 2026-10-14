@@ -178,12 +178,15 @@ impl<'a> FirmwareManager<'a> {
 
                     defmt::info!("[FW MGR] Switching to new firmware...");
 
+                    // Wait for the tcp socket to flush
+                    Timer::after(Duration::from_secs(1)).await;
                     cortex_m::peripheral::SCB::sys_reset();
                 }
                 Header::Reset => {
                     if self.respond(Response::Success).await.is_err() {
                         return;
                     }
+                    // Wait for the tcp socket to flush
                     Timer::after(Duration::from_secs(1)).await;
                     cortex_m::peripheral::SCB::sys_reset();
                 }

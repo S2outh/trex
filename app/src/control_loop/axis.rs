@@ -24,11 +24,7 @@ where
 
 // limits
 const DEADBAND: f64 = 0.05; // rad
-
-// min 50 percent of the travel should be spent at the speed limit,
-// the controller uses this value to dynamically recalculate a
-// max speed at runtime.
-const MIN_PERCENT_MAX_SPEED: f64 = 0.5;
+const ANGLE_LIMITS: f64 = core::f64::consts::PI;
 
 impl<'d, T, TC, C> Axis<'d, T, TC, C>
 where
@@ -38,7 +34,7 @@ where
 {
     pub fn new(stepper: Stepper<'d, T, TC, C>, max_speed: f64, acceleration: f64) -> Self {
         let controller =
-            TrapezoidRampController::new(acceleration, max_speed, MIN_PERCENT_MAX_SPEED);
+            TrapezoidRampController::new(acceleration, max_speed);
         Self {
             stepper,
             controller,
@@ -46,22 +42,30 @@ where
         }
     }
 
-    pub fn update(&mut self, target_pos: f64, dt: f64) -> AxisState {
+    pub fn update(&mut self, mut target_pos: f64, target_vel: f64, dt: f64) -> AxisState {
+
+        target_pos = target_pos.clamp(-ANGLE_LIMITS, ANGLE_LIMITS);
+
         let current_pos = self.stepper.get_pos();
         let current_vel = self.stepper.get_speed();
         let pos_diff = target_pos - current_pos;
+        let relative_vel = current_vel - target_vel;
 
-        // calculate halt_speed from acceleration to prevent overshoot
-        let halt_speed = dt * self.acceleration;
-        if pos_diff.abs() < DEADBAND && current_vel.abs() < halt_speed {
-            self.stepper.stop();
+        // calculate velocity deadband from acceleration to prevent overshoot
+        let velocity_db = dt * self.acceleration;
+        if pos_diff.abs() < DEADBAND && relative_vel.abs() < velocity_db {
+            if current_vel < velocity_db {
+                self.stepper.stop();
+            } else {
+                self.stepper.set_speed(target_vel);
+            }
             return AxisState {
                 pos: current_pos,
-                vel: 0.,
+                vel: current_vel,
             };
         }
 
-        let new_vel = self.controller.update(current_vel, pos_diff, dt);
+        let new_vel = self.controller.update(relative_vel, pos_diff, dt);
 
         self.stepper.set_speed(new_vel);
 
