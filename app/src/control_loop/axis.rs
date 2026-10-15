@@ -65,7 +65,7 @@ where
             };
         }
 
-        let new_vel = self.controller.update(relative_vel, pos_diff, dt);
+        let new_vel = target_vel + self.controller.update(relative_vel, pos_diff, dt);
 
         self.stepper.set_speed(new_vel);
 

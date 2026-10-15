@@ -113,7 +113,9 @@ async fn main() -> Result<()> {
                 .unwrap();
             loop {
                 let msg = sub.next().await.unwrap();
-                let def = groundstation::from_address(msg.subject.as_str()).unwrap();
+                let Ok(def) = groundstation::from_address(msg.subject.as_str()) else {
+                    continue;
+                };
                 match_def!(def, {
                     defs::State => {
                         let v = minicbor_serde::from_slice::<TMValue<State>>(&msg.payload)?;
