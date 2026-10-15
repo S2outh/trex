@@ -36,6 +36,8 @@ embassy-embedded-hal = "0.6.0"
 embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }
 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt"] }
+# embassy-nats = { path = "/home/eliseoc/WueSpace/South/Lib/embassy-nats", features = ["defmt"] }
+
 portable-atomic = { version = "1.15.0", features = ["float"] }
 heapless = "0.9.3"
 critical-section = "1.2.0"

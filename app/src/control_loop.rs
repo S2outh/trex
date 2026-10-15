@@ -57,10 +57,7 @@ impl<'a> TrackingLoop<'a> {
                 &C_CH,
             )
             .await
-            .unwrap()
-    }
-    async fn deinit(&mut self) {
-        self.nats_client.unsub_all().await;
+            .unwrap();
     }
     // Process a received state in tracking mode
     async fn process_target(&mut self, _nats_msg: NatsMsg) {
@@ -98,9 +95,6 @@ impl<'a> ManualLoop<'a> {
             )
             .await
             .unwrap();
-    }
-    async fn deinit(&mut self) {
-        self.nats_client.unsub_all().await;
     }
     // Execute a received command in manual mode
     async fn process_command(&mut self, axs: &mut Axs<'a>, nats_msg: NatsMsg) {
@@ -166,33 +160,25 @@ impl<'a> ControlLoop<'a> {
             last_tick: Instant::now(),
         }
     }
-    async fn init_inner(&mut self) {
-        match &mut self.state {
-            State::Tracking(tl) => tl.init().await,
-            State::Manual(ml) => ml.init().await,
-        }
-    }
-    async fn deinit_inner(&mut self) {
-        match &mut self.state {
-            State::Tracking(tl) => tl.deinit().await,
-            State::Manual(ml) => ml.deinit().await,
-        }
-    }
     // Update the state after a received state change command
     async fn process_state(&mut self, nats_msg: NatsMsg) {
-        self.deinit_inner().await;
         match minicbor_serde::from_slice::<trex::State>(&nats_msg.data) {
             Ok(cmd) => match cmd {
                 trex::State::Tracking => {
-                    self.state = State::Tracking(TrackingLoop::new(self.tm_channel, self.state_client.clone()))
+                    defmt::info!("new state: tracking");
+                    self.state = State::Tracking(TrackingLoop::new(self.tm_channel, self.state_client.clone()));
+                    let State::Tracking(t) = &mut self.state else { panic!() };
+                    t.init().await;
                 },
                 trex::State::Manual => {
-                    self.state = State::Manual(ManualLoop::new(self.tm_channel, self.state_client.clone()))
+                    defmt::info!("new state: manual");
+                    self.state = State::Manual(ManualLoop::new(self.tm_channel, self.state_client.clone()));
+                    let State::Manual(t) = &mut self.state else { panic!() };
+                    t.init().await;
                 },
             },
             Err(e) => defmt::warn!("[CTRL] could not decode state: {}", defmt::Debug2Format(&e)),
         }
-        self.init_inner().await;
     }
     pub async fn run(&mut self) -> ! {
         self.state_client
@@ -203,7 +189,8 @@ impl<'a> ControlLoop<'a> {
             .await
             .unwrap();
 
-        self.init_inner().await;
+        let State::Tracking(t) = &mut self.state else { panic!() };
+        t.init().await;
 
         loop {
             if let Some(state_cmd) = self.state_client.try_receive() {

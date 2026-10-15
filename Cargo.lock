@@ -897,7 +897,7 @@ dependencies = [
 [[package]]
 name = "embassy-nats"
 version = "1.0.0"
-source = "git+https://github.com/S2outh/embassy-nats.git#cf1e1332ff147f8f9b71664aff559a39f8b08b99"
+source = "git+https://github.com/S2outh/embassy-nats.git#a58be429df62a0632977e576217154121f109155"
 dependencies = [
  "defmt 1.2.0",
  "embassy-futures",
