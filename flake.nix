@@ -26,7 +26,6 @@
         rust-analyzer-nightly = fpkgs.rust-analyzer;
         rust-toolchain = fpkgs.combine [
           profile.rustc
-          profile.miri
           profile.rust-src
           profile.cargo
           profile.rustfmt
@@ -63,10 +62,6 @@
             cargo-show-asm
             cargo-binutils
             cargo-bloat
-
-            # utilities for shell scripts
-            jq
-            ripgrep
 
             # local tools
             trex-probe

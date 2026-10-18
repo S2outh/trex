@@ -151,6 +151,9 @@ impl<'a> FirmwareManager<'a> {
                 Header::Apply { size, signature } => {
                     if !self.validated {
                         defmt::warn!("[FW MGR] Not validated, ignoring apply cmd");
+                        if self.respond(Response::Fail).await.is_err() {
+                            return;
+                        }
                         continue;
                     }
 

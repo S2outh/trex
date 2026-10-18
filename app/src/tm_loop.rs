@@ -18,8 +18,9 @@ pub struct AtomicState {
 impl AtomicState {
     const fn to_u8(state: StateTM) -> u8 {
         match state {
-            StateTM::Tracking => 0,
-            StateTM::Manual => 1,
+            StateTM::Halted => 0,
+            StateTM::Tracking => 1,
+            StateTM::Manual => 2,
         }
     }
     pub const fn new(state: StateTM) -> Self {
@@ -32,8 +33,9 @@ impl AtomicState {
     }
     pub fn load(&self, order: Ordering) -> StateTM {
         match self.state.load(order) {
-            0 => StateTM::Tracking,
-            1 => StateTM::Manual,
+            0 => StateTM::Halted,
+            1 => StateTM::Tracking,
+            2 => StateTM::Manual,
             _ => unreachable!(),
         }
     }
@@ -62,7 +64,7 @@ impl TMChannel {
             az_vel: AtomicF64::new(0.),
             el_pos: AtomicF64::new(0.),
             el_vel: AtomicF64::new(0.),
-            state: AtomicState::new(StateTM::Manual),
+            state: AtomicState::new(StateTM::Halted),
         }
     }
     pub fn store_az(&self, s: AxisState, order: Ordering) {

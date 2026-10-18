@@ -113,9 +113,9 @@ dependencies = [
 
 [[package]]
 name = "arc-swap"
-version = "1.9.2"
+version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+checksum = "380962b3d93b99642e50b9febf72c071e97e8b32d86eae9cf4ef582bb960ae6e"
 dependencies = [
  "rustversion",
 ]
@@ -897,7 +897,7 @@ dependencies = [
 [[package]]
 name = "embassy-nats"
 version = "1.0.0"
-source = "git+https://github.com/S2outh/embassy-nats.git#a58be429df62a0632977e576217154121f109155"
+source = "git+https://github.com/S2outh/embassy-nats.git#b6b66a484f06c2b46e43f58bd2d7d781fceab6e7"
 dependencies = [
  "defmt 1.2.0",
  "embassy-futures",
@@ -1576,9 +1576,9 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "libc"
-version = "0.2.190"
+version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "libm"
@@ -2221,9 +2221,9 @@ dependencies = [
 
 [[package]]
 name = "schannel"
-version = "0.1.29"
+version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
+checksum = "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -2475,7 +2475,7 @@ dependencies = [
 [[package]]
 name = "south-common"
 version = "4.0.0"
-source = "git+https://github.com/S2outh/south-common.git#c0b05db00a3318a36e253b9bb99880a2fc43b073"
+source = "git+https://github.com/S2outh/south-common.git#ecb0ea12b55f6a1c86c815eb12da8b7d4999285a"
 dependencies = [
  "bitflags 2.13.2",
  "chell",

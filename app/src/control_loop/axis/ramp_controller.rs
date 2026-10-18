@@ -5,10 +5,7 @@ pub struct TrapezoidRampController {
 
 impl TrapezoidRampController {
     pub fn new(a_max: f64, v_max: f64) -> Self {
-        Self {
-            a_max,
-            v_max,
-        }
+        Self { a_max, v_max }
     }
     pub fn update(&mut self, v: f64, d: f64, dt: f64) -> f64 {
         let v_abs = v.abs();

@@ -37,6 +37,7 @@ struct Axs<'a> {
 }
 
 enum State<'a> {
+    Halted,
     Tracking(TrackingLoop<'a>),
     Manual(ManualLoop<'a>),
 }
@@ -47,17 +48,19 @@ struct TrackingLoop<'a> {
 }
 
 impl<'a> TrackingLoop<'a> {
-    fn new(tm_channel: &'a TMChannel, nats_client: NatsClient<'a>) -> Self {
-        Self { tm_channel, nats_client }
-    }
-    async fn init(&mut self) {
-        self.nats_client
+    async fn init(tm_channel: &'a TMChannel, mut nats_client: NatsClient<'a>) -> Self {
+        nats_client
             .subscribe(
                 heapless::String::try_from(tm::upper_sensor::KinematicState.address()).unwrap(),
                 &C_CH,
             )
             .await
             .unwrap();
+
+        Self {
+            tm_channel,
+            nats_client,
+        }
     }
     // Process a received state in tracking mode
     async fn process_target(&mut self, _nats_msg: NatsMsg) {
@@ -73,7 +76,7 @@ impl<'a> TrackingLoop<'a> {
         // TODO
         self.tm_channel
             .store_state(trex::State::Tracking, Ordering::Relaxed);
-        Timer::after(Duration::from_millis(200)).await;
+        Timer::after(Duration::from_millis(5)).await;
     }
 }
 
@@ -84,17 +87,20 @@ struct ManualLoop<'a> {
 }
 
 impl<'a> ManualLoop<'a> {
-    fn new(tm_channel: &'a TMChannel, nats_client: NatsClient<'a>) -> Self {
-        Self { target: na::Vector2::zeros(), tm_channel, nats_client }
-    }
-    async fn init(&mut self) {
-        self.nats_client
+    async fn init(tm_channel: &'a TMChannel, mut nats_client: NatsClient<'a>) -> Self {
+        nats_client
             .subscribe(
                 heapless::String::try_from(gcs_defs::trex::Command.address()).unwrap(),
                 &C_CH,
             )
             .await
             .unwrap();
+
+        Self {
+            target: na::Vector2::zeros(),
+            tm_channel,
+            nats_client,
+        }
     }
     // Execute a received command in manual mode
     async fn process_command(&mut self, axs: &mut Axs<'a>, nats_msg: NatsMsg) {
@@ -109,11 +115,7 @@ impl<'a> ManualLoop<'a> {
                     self.target = new_target;
                 }
                 Command::Rotate(rel) => {
-                    defmt::info!(
-                        "[CTRL] setting new relative target: {} {}",
-                        rel.x,
-                        rel.y
-                    );
+                    defmt::info!("[CTRL] setting new relative target: {} {}", rel.x, rel.y);
                     let pos = na::Vector2::new(axs.azimut.get_pos(), axs.elevation.get_pos());
                     self.target = pos + rel;
                 }
@@ -142,7 +144,7 @@ pub struct ControlLoop<'a> {
     tm_channel: &'a TMChannel,
     last_tick: Instant,
     state_client: NatsClient<'a>,
-    axs: Axs<'a>
+    axs: Axs<'a>,
 }
 
 impl<'a> ControlLoop<'a> {
@@ -153,29 +155,39 @@ impl<'a> ControlLoop<'a> {
         elevation: ElevationAxis<'a>,
     ) -> Self {
         Self {
-            state_client: nats_client.clone(),
+            state: State::Halted,
             tm_channel,
-            axs: Axs { azimut, elevation },
-            state: State::Tracking(TrackingLoop::new(tm_channel, nats_client)),
             last_tick: Instant::now(),
+            state_client: nats_client.clone(),
+            axs: Axs { azimut, elevation },
         }
     }
     // Update the state after a received state change command
     async fn process_state(&mut self, nats_msg: NatsMsg) {
         match minicbor_serde::from_slice::<trex::State>(&nats_msg.data) {
             Ok(cmd) => match cmd {
+                trex::State::Halted => {
+                    defmt::info!("new state: halted");
+                    self.axs.azimut.stop();
+                    self.axs.elevation.stop();
+                    self.state = State::Halted;
+                }
                 trex::State::Tracking => {
                     defmt::info!("new state: tracking");
-                    self.state = State::Tracking(TrackingLoop::new(self.tm_channel, self.state_client.clone()));
-                    let State::Tracking(t) = &mut self.state else { panic!() };
-                    t.init().await;
-                },
+                    // set state to halted first to free the nats channel
+                    self.state = State::Halted;
+                    self.state = State::Tracking(
+                        TrackingLoop::init(self.tm_channel, self.state_client.clone()).await,
+                    );
+                }
                 trex::State::Manual => {
                     defmt::info!("new state: manual");
-                    self.state = State::Manual(ManualLoop::new(self.tm_channel, self.state_client.clone()));
-                    let State::Manual(t) = &mut self.state else { panic!() };
-                    t.init().await;
-                },
+                    // set state to halted first to free the nats channel
+                    self.state = State::Halted;
+                    self.state = State::Manual(
+                        ManualLoop::init(self.tm_channel, self.state_client.clone()).await,
+                    );
+                }
             },
             Err(e) => defmt::warn!("[CTRL] could not decode state: {}", defmt::Debug2Format(&e)),
         }
@@ -189,9 +201,6 @@ impl<'a> ControlLoop<'a> {
             .await
             .unwrap();
 
-        let State::Tracking(t) = &mut self.state else { panic!() };
-        t.init().await;
-
         loop {
             if let Some(state_cmd) = self.state_client.try_receive() {
                 self.process_state(state_cmd).await;
@@ -204,6 +213,11 @@ impl<'a> ControlLoop<'a> {
             self.last_tick = now;
 
             match &mut self.state {
+                State::Halted => {
+                    self.tm_channel
+                        .store_state(trex::State::Halted, Ordering::Relaxed);
+                    Timer::after_millis(5).await;
+                }
                 State::Tracking(tl) => tl.tick(dt_secs).await,
                 State::Manual(ml) => ml.tick(&mut self.axs, dt_secs).await,
             }

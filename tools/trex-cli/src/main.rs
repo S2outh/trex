@@ -31,6 +31,7 @@ pub struct Cli {
 pub enum Commands {
     Set(TargetArgs),
     Rotate(TargetArgs),
+    SetHalted,
     SetManual,
     SetTracking,
     ReadTm,
@@ -75,7 +76,7 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
-        },
+        }
         Commands::Rotate(args) => {
             let command = Command::Rotate(na::Vector2::new(args.az, args.el));
 
@@ -85,7 +86,17 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
-        },
+        }
+        Commands::SetHalted => {
+            let command = State::Halted;
+
+            nats_client
+                .publish(
+                    defs::ChangeState.address(),
+                    minicbor_serde::to_vec(&command)?.into(),
+                )
+                .await?;
+        }
         Commands::SetManual => {
             let command = State::Manual;
 
@@ -95,7 +106,7 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
-        },
+        }
         Commands::SetTracking => {
             let command = State::Tracking;
 
@@ -105,7 +116,7 @@ async fn main() -> Result<()> {
                     minicbor_serde::to_vec(&command)?.into(),
                 )
                 .await?;
-        },
+        }
         Commands::ReadTm => {
             let mut sub = nats_client
                 .subscribe(format!("{}.>", defs::base_address()))
