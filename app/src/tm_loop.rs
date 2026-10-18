@@ -9,7 +9,7 @@ use nalgebra as na;
 use portable_atomic::AtomicF64;
 use serde::Serialize;
 
-use crate::{NATS_MAX_MESSAGE_SIZE, NATS_NUM_SUBS, NatsCollections, control_loop::axis::AxisState};
+use crate::{NATS_MAX_MESSAGE_SIZE, NATS_NUM_SUBS, NatsCollections};
 type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
 
 pub struct AtomicState {
@@ -39,6 +39,11 @@ impl AtomicState {
             _ => unreachable!(),
         }
     }
+}
+
+pub struct AxisState {
+    pub pos: f64,
+    pub vel: f64,
 }
 
 struct TM {

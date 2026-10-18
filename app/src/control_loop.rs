@@ -8,12 +8,13 @@ use nalgebra as na;
 use embassy_stm32::peripherals;
 use embassy_stm32::timer;
 
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use south_common::chell::ChellDefinition;
 use south_common::definitions::groundstation as gcs_defs;
 use south_common::definitions::telemetry as tm;
 use south_common::types::trex::{self, Command};
 
+use crate::tm_loop::AxisState;
 use crate::tm_loop::TMChannel;
 use crate::{NATS_NUM_SUBS, NatsCollections, control_loop::axis::Axis};
 
@@ -43,12 +44,11 @@ enum State<'a> {
 }
 
 struct TrackingLoop<'a> {
-    tm_channel: &'a TMChannel,
     nats_client: NatsClient<'a>,
 }
 
 impl<'a> TrackingLoop<'a> {
-    async fn init(tm_channel: &'a TMChannel, mut nats_client: NatsClient<'a>) -> Self {
+    async fn init(mut nats_client: NatsClient<'a>) -> Self {
         nats_client
             .subscribe(
                 heapless::String::try_from(tm::upper_sensor::KinematicState.address()).unwrap(),
@@ -57,10 +57,7 @@ impl<'a> TrackingLoop<'a> {
             .await
             .unwrap();
 
-        Self {
-            tm_channel,
-            nats_client,
-        }
+        Self { nats_client }
     }
     // Process a received state in tracking mode
     async fn process_target(&mut self, _nats_msg: NatsMsg) {
@@ -72,22 +69,17 @@ impl<'a> TrackingLoop<'a> {
         if let Some(target) = self.nats_client.try_receive() {
             self.process_target(target).await;
         }
-
-        // TODO
-        self.tm_channel
-            .store_state(trex::State::Tracking, Ordering::Relaxed);
-        Timer::after(Duration::from_millis(5)).await;
     }
 }
 
 struct ManualLoop<'a> {
-    target: na::Vector2<f64>,
-    tm_channel: &'a TMChannel,
+    target_pos: na::Vector2<f64>,
+    target_vel: na::Vector2<f64>,
     nats_client: NatsClient<'a>,
 }
 
 impl<'a> ManualLoop<'a> {
-    async fn init(tm_channel: &'a TMChannel, mut nats_client: NatsClient<'a>) -> Self {
+    async fn init(mut nats_client: NatsClient<'a>) -> Self {
         nats_client
             .subscribe(
                 heapless::String::try_from(gcs_defs::trex::Command.address()).unwrap(),
@@ -97,8 +89,8 @@ impl<'a> ManualLoop<'a> {
             .unwrap();
 
         Self {
-            target: na::Vector2::zeros(),
-            tm_channel,
+            target_pos: na::Vector2::zeros(),
+            target_vel: na::Vector2::zeros(),
             nats_client,
         }
     }
@@ -106,18 +98,44 @@ impl<'a> ManualLoop<'a> {
     async fn process_command(&mut self, axs: &mut Axs<'a>, nats_msg: NatsMsg) {
         match minicbor_serde::from_slice::<Command>(&nats_msg.data) {
             Ok(cmd) => match cmd {
-                Command::Set(new_target) => {
-                    defmt::info!(
-                        "[CTRL] setting new target: {} {}",
-                        new_target.x,
-                        new_target.y
-                    );
-                    self.target = new_target;
+                Command::Set(pos) => {
+                    defmt::info!("[CTRL] setting new target: {} {}", pos.x, pos.y);
+                    self.target_pos = pos;
+                    self.target_vel = na::Vector2::zeros();
                 }
-                Command::Rotate(rel) => {
-                    defmt::info!("[CTRL] setting new relative target: {} {}", rel.x, rel.y);
+                Command::SetMoving(pos, vel) => {
+                    defmt::info!(
+                        "[CTRL] setting new moving target, pos: {} {}, vel: {} {}",
+                        pos.x,
+                        pos.y,
+                        vel.x,
+                        vel.y
+                    );
+                    self.target_pos = pos;
+                    self.target_vel = vel;
+                }
+                Command::Rotate(rel_pos) => {
+                    defmt::info!(
+                        "[CTRL] setting new relative target: {} {}",
+                        rel_pos.x,
+                        rel_pos.y
+                    );
                     let pos = na::Vector2::new(axs.azimut.get_pos(), axs.elevation.get_pos());
-                    self.target = pos + rel;
+                    self.target_pos = pos + rel_pos;
+                    self.target_vel = na::Vector2::zeros();
+                }
+                Command::RotateMoving(rel_pos, rel_vel) => {
+                    defmt::info!(
+                        "[CTRL] setting new moving relative target, pos: {} {}, vel: {} {}",
+                        rel_pos.x,
+                        rel_pos.y,
+                        rel_vel.x,
+                        rel_vel.y
+                    );
+                    let pos = na::Vector2::new(axs.azimut.get_pos(), axs.elevation.get_pos());
+                    let vel = na::Vector2::new(axs.azimut.get_vel(), axs.elevation.get_vel());
+                    self.target_pos = pos + rel_pos;
+                    self.target_vel = vel + rel_vel;
                 }
             },
             Err(e) => defmt::warn!("[CTRL] could not decode cmd: {}", defmt::Debug2Format(&e)),
@@ -128,14 +146,9 @@ impl<'a> ManualLoop<'a> {
             self.process_command(axs, cmd).await;
         }
 
-        // TEMP
-        let az_state = axs.azimut.update(self.target.x, 0., dt);
-        let el_state = axs.elevation.update(self.target.y, 0., dt);
-        self.tm_channel.store_az(az_state, Ordering::Relaxed);
-        self.tm_channel.store_el(el_state, Ordering::Relaxed);
-        self.tm_channel
-            .store_state(trex::State::Manual, Ordering::Relaxed);
-        Timer::after_millis(5).await;
+        axs.azimut.update(self.target_pos.x, self.target_vel.x, dt);
+        axs.elevation
+            .update(self.target_pos.y, self.target_vel.y, dt);
     }
 }
 
@@ -165,30 +178,31 @@ impl<'a> ControlLoop<'a> {
     // Update the state after a received state change command
     async fn process_state(&mut self, nats_msg: NatsMsg) {
         match minicbor_serde::from_slice::<trex::State>(&nats_msg.data) {
-            Ok(cmd) => match cmd {
-                trex::State::Halted => {
-                    defmt::info!("new state: halted");
-                    self.axs.azimut.stop();
-                    self.axs.elevation.stop();
-                    self.state = State::Halted;
+            Ok(cmd) => {
+                match cmd {
+                    trex::State::Halted => {
+                        defmt::info!("new state: halted");
+                        self.axs.azimut.stop();
+                        self.axs.elevation.stop();
+                        self.state = State::Halted;
+                    }
+                    trex::State::Tracking => {
+                        defmt::info!("new state: tracking");
+                        // set state to halted first to free the nats channel
+                        self.state = State::Halted;
+                        self.state =
+                            State::Tracking(TrackingLoop::init(self.state_client.clone()).await);
+                    }
+                    trex::State::Manual => {
+                        defmt::info!("new state: manual");
+                        // set state to halted first to free the nats channel
+                        self.state = State::Halted;
+                        self.state =
+                            State::Manual(ManualLoop::init(self.state_client.clone()).await);
+                    }
                 }
-                trex::State::Tracking => {
-                    defmt::info!("new state: tracking");
-                    // set state to halted first to free the nats channel
-                    self.state = State::Halted;
-                    self.state = State::Tracking(
-                        TrackingLoop::init(self.tm_channel, self.state_client.clone()).await,
-                    );
-                }
-                trex::State::Manual => {
-                    defmt::info!("new state: manual");
-                    // set state to halted first to free the nats channel
-                    self.state = State::Halted;
-                    self.state = State::Manual(
-                        ManualLoop::init(self.tm_channel, self.state_client.clone()).await,
-                    );
-                }
-            },
+                self.tm_channel.store_state(cmd, Ordering::Relaxed);
+            }
             Err(e) => defmt::warn!("[CTRL] could not decode state: {}", defmt::Debug2Format(&e)),
         }
     }
@@ -212,15 +226,29 @@ impl<'a> ControlLoop<'a> {
             let dt_secs = dt.as_micros() as f64 / 1_000_000.;
             self.last_tick = now;
 
+            // send axis tm (every tick for now)
+            self.tm_channel.store_az(
+                AxisState {
+                    pos: self.axs.azimut.get_pos(),
+                    vel: self.axs.azimut.get_vel(),
+                },
+                Ordering::Relaxed,
+            );
+            self.tm_channel.store_el(
+                AxisState {
+                    pos: self.axs.elevation.get_pos(),
+                    vel: self.axs.elevation.get_vel(),
+                },
+                Ordering::Relaxed,
+            );
+
             match &mut self.state {
-                State::Halted => {
-                    self.tm_channel
-                        .store_state(trex::State::Halted, Ordering::Relaxed);
-                    Timer::after_millis(5).await;
-                }
+                State::Halted => (),
                 State::Tracking(tl) => tl.tick(dt_secs).await,
                 State::Manual(ml) => ml.tick(&mut self.axs, dt_secs).await,
             }
+
+            Timer::after_millis(5).await
         }
     }
 }

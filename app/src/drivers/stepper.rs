@@ -78,21 +78,12 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChanne
         }
     }
 
-    pub fn set_speed(&mut self, speed: f64) {
-        let frequency = speed * self.angle_factor;
+    pub fn set_vel(&mut self, vel: f64) {
+        let frequency = vel * self.angle_factor;
         self.step_interface
             .set_frequency(hz(frequency.abs() as u32));
         self.set_dir(frequency);
         self.step_interface.start();
-    }
-
-    pub fn get_speed(&mut self) -> f64 {
-        if self.step_interface.is_enabled() {
-            let frequency = self.step_interface.get_frequency().0;
-            frequency as f64 / self.angle_factor * self.dir.float()
-        } else {
-            0.
-        }
     }
 
     pub fn stop(&mut self) {
@@ -101,6 +92,15 @@ impl<'d, T: GeneralInstance4Channel, TC: GeneralInstance4Channel, C: TimerChanne
 
     pub fn get_pos(&mut self) -> f64 {
         self.step_counter.get_pos() as f64 / self.angle_factor
+    }
+
+    pub fn get_vel(&mut self) -> f64 {
+        if self.step_interface.is_enabled() {
+            let frequency = self.step_interface.get_frequency().0;
+            frequency as f64 / self.angle_factor * self.dir.float()
+        } else {
+            0.
+        }
     }
 
     fn set_dir(&mut self, dir: f64) {

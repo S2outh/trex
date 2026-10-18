@@ -1648,15 +1648,15 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "minicbor"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c12b4033ffaa92fbf9df03df38d19324f52bad130dd223f811734a8006dd2d69"
+checksum = "e7244eafd1e09e7c4e33043881997aa6ab6dffff3ed2cee3395a278980481d6e"
 
 [[package]]
 name = "minicbor-serde"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7abdec9761edcb452764c68564ae4b77ec62f6c1a361aa68f5de15fd788c679"
+checksum = "b05ae1ca1d2c55196b389c8308119aa0e2aa8d31115f018dcc23ba3c5d350eb3"
 dependencies = [
  "minicbor",
  "serde",
@@ -2475,7 +2475,7 @@ dependencies = [
 [[package]]
 name = "south-common"
 version = "4.0.0"
-source = "git+https://github.com/S2outh/south-common.git#ecb0ea12b55f6a1c86c815eb12da8b7d4999285a"
+source = "git+https://github.com/S2outh/south-common.git#156cf6be893a27e423cbfb8f7229cad9a365ea1a"
 dependencies = [
  "bitflags 2.13.2",
  "chell",

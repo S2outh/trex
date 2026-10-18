@@ -6,11 +6,6 @@ use crate::{
     control_loop::axis::ramp_controller::TrapezoidRampController, drivers::stepper::Stepper,
 };
 
-pub struct AxisState {
-    pub pos: f64,
-    pub vel: f64,
-}
-
 pub struct Axis<'d, T, TC, C>
 where
     T: GeneralInstance4Channel,
@@ -41,11 +36,11 @@ where
         }
     }
 
-    pub fn update(&mut self, mut target_pos: f64, target_vel: f64, dt: f64) -> AxisState {
+    pub fn update(&mut self, mut target_pos: f64, target_vel: f64, dt: f64) {
         target_pos = target_pos.clamp(-ANGLE_LIMITS, ANGLE_LIMITS);
 
         let current_pos = self.stepper.get_pos();
-        let current_vel = self.stepper.get_speed();
+        let current_vel = self.stepper.get_vel();
         let pos_diff = target_pos - current_pos;
         let relative_vel = current_vel - target_vel;
 
@@ -55,22 +50,14 @@ where
             if current_vel < velocity_db {
                 self.stepper.stop();
             } else {
-                self.stepper.set_speed(target_vel);
+                self.stepper.set_vel(target_vel);
             }
-            return AxisState {
-                pos: current_pos,
-                vel: current_vel,
-            };
+            return;
         }
 
         let new_vel = target_vel + self.controller.update(relative_vel, pos_diff, dt);
 
-        self.stepper.set_speed(new_vel);
-
-        AxisState {
-            pos: current_pos,
-            vel: new_vel,
-        }
+        self.stepper.set_vel(new_vel);
     }
 
     pub fn stop(&mut self) {
@@ -79,5 +66,9 @@ where
 
     pub fn get_pos(&mut self) -> f64 {
         self.stepper.get_pos()
+    }
+
+    pub fn get_vel(&mut self) -> f64 {
+        self.stepper.get_vel()
     }
 }
