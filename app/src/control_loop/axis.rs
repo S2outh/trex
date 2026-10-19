@@ -1,10 +1,18 @@
 use embassy_stm32::timer::{GeneralInstance4Channel, TimerChannel};
 
 mod ramp_controller;
+mod kinematic_limiter;
 
 use crate::{
-    control_loop::axis::ramp_controller::TrapezoidRampController, drivers::stepper::Stepper,
+    control_loop::axis::{kinematic_limiter::KinematicLimiter, ramp_controller::TrapezoidRampController}, drivers::stepper::Stepper,
 };
+
+pub struct AxisConfig {
+    pub max_speed: f64,
+    pub acceleration: f64,
+    pub lower_bound: f64,
+    pub upper_bound: f64,
+}
 
 pub struct Axis<'d, T, TC, C>
 where
@@ -14,12 +22,12 @@ where
 {
     stepper: Stepper<'d, T, TC, C>,
     controller: TrapezoidRampController,
+    limiter: KinematicLimiter,
     acceleration: f64,
 }
 
 // limits
 const DEADBAND: f64 = 0.05; // rad
-const ANGLE_LIMITS: f64 = core::f64::consts::PI;
 
 impl<'d, T, TC, C> Axis<'d, T, TC, C>
 where
@@ -27,26 +35,26 @@ where
     TC: GeneralInstance4Channel,
     C: TimerChannel,
 {
-    pub fn new(stepper: Stepper<'d, T, TC, C>, max_speed: f64, acceleration: f64) -> Self {
-        let controller = TrapezoidRampController::new(acceleration, max_speed);
+    pub fn new(stepper: Stepper<'d, T, TC, C>, config: AxisConfig) -> Self {
+        let controller = TrapezoidRampController::new(config.acceleration, config.max_speed);
+        let limiter = KinematicLimiter::new(config.lower_bound, config.upper_bound, config.acceleration);
         Self {
             stepper,
             controller,
-            acceleration,
+            limiter,
+            acceleration: config.acceleration,
         }
     }
 
-    pub fn update(&mut self, mut target_pos: f64, target_vel: f64, dt: f64) {
-        target_pos = target_pos.clamp(-ANGLE_LIMITS, ANGLE_LIMITS);
-
+    pub fn update(&mut self, target_pos: f64, target_vel: f64, dt: f64) {
         let current_pos = self.stepper.get_pos();
         let current_vel = self.stepper.get_vel();
-        let pos_diff = target_pos - current_pos;
+        let relative_pos = target_pos - current_pos;
         let relative_vel = current_vel - target_vel;
 
         // calculate velocity deadband from acceleration to prevent overshoot
         let velocity_db = dt * self.acceleration;
-        if pos_diff.abs() < DEADBAND && relative_vel.abs() < velocity_db {
+        if relative_pos.abs() < DEADBAND && relative_vel.abs() < velocity_db {
             if current_vel < velocity_db {
                 self.stepper.stop();
             } else {
@@ -55,9 +63,10 @@ where
             return;
         }
 
-        let new_vel = target_vel + self.controller.update(relative_vel, pos_diff, dt);
+        let optimal_vel = target_vel + self.controller.update(relative_vel, relative_pos, dt);
+        let limited_vel = self.limiter.clamp_vel(target_pos, optimal_vel);
 
-        self.stepper.set_vel(new_vel);
+        self.stepper.set_vel(limited_vel);
     }
 
     pub fn stop(&mut self) {

@@ -23,7 +23,7 @@ use heapless::Vec;
 use static_cell::StaticCell;
 
 use crate::control_loop::ControlLoop;
-use crate::control_loop::axis::Axis;
+use crate::control_loop::axis::{Axis, AxisConfig};
 use crate::drivers::stepper::step_counter::StepCounter;
 use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
@@ -344,8 +344,18 @@ async fn main(spawner: Spawner) {
     let mut _red_led = Output::new(p.PE0, Level::High, Speed::Low);
 
     // setup control loop
-    let azimut = Axis::new(azimut_stepper, AZ_MAX_SPEED, AZ_ACCELERATION);
-    let elevation = Axis::new(elevation_stepper, EL_MAX_SPEED, EL_ACCELERATION);
+    let azimut = Axis::new(azimut_stepper, AxisConfig {
+        max_speed: AZ_MAX_SPEED,
+        acceleration: AZ_ACCELERATION,
+        lower_bound: -core::f64::consts::PI,
+        upper_bound: core::f64::consts::PI,
+    });
+    let elevation = Axis::new(elevation_stepper, AxisConfig {
+        max_speed: EL_MAX_SPEED,
+        acceleration: EL_ACCELERATION,
+        lower_bound: -core::f64::consts::PI,
+        upper_bound: core::f64::consts::PI,
+    });
 
     // launch control loop
     let control_loop = ControlLoop::new(client, &TM_CHANNEL, azimut, elevation);
