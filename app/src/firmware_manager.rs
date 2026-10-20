@@ -21,7 +21,7 @@ pub struct FirmwareManagerStorage<'a> {
 }
 
 impl<'a> FirmwareManagerStorage<'a> {
-    pub async fn new(flash: Flash<'a, Async>) -> Self {
+    pub fn new(flash: Flash<'a, Async>) -> Self {
         let flash = Mutex::new(flash);
         let magic = AlignedBuffer([0; WRITE_SIZE]);
         Self { flash, magic }

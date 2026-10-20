@@ -3,6 +3,8 @@
 
 use core::net::{Ipv4Addr, SocketAddr};
 
+use panic_halt as _;
+
 use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_nats::UserPwdAuthenticator;
@@ -12,18 +14,20 @@ use embassy_net::{Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
 use embassy_stm32::gpio::{Output, Speed};
-use embassy_stm32::peripherals::{ETH, ETH_SMA, IWDG1, RNG};
+use embassy_stm32::peripherals;
 use embassy_stm32::rng::Rng;
 use embassy_stm32::timer::low_level::TriggerSource;
+use embassy_stm32::usart::{self, Uart};
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::{Config, gpio::Level};
-use embassy_stm32::{bind_interrupts, rcc, rng};
+use embassy_stm32::{bind_interrupts, dma, rcc, rng};
 use embassy_time::Timer;
 use heapless::Vec;
-use static_cell::StaticCell;
+use static_cell::{ConstStaticCell, StaticCell};
 
 use crate::control_loop::ControlLoop;
 use crate::control_loop::axis::{Axis, AxisConfig};
+use crate::drivers::gnss::Gnss;
 use crate::drivers::stepper::step_counter::StepCounter;
 use crate::drivers::stepper::step_interface::StepInterface;
 use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
@@ -31,11 +35,6 @@ use crate::drivers::stepper::{Stepper, step_interface::PulsePin};
 use crate::firmware_manager::{FirmwareManager, FirmwareManagerStorage};
 use crate::logger::TcpLogger;
 use crate::tm_loop::{TMChannel, TMLoop};
-
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    cortex_m::peripheral::SCB::sys_reset();
-}
 
 mod control_loop;
 mod drivers;
@@ -62,20 +61,20 @@ static FIRMWARE_STORAGE: StaticCell<FirmwareManagerStorage> = StaticCell::new();
 
 // Ethernet
 // queues for raw packets before and after processing
-static PACKET_QUEUE: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
+static PACKET_QUEUE: ConstStaticCell<PacketQueue<4, 4>> = ConstStaticCell::new(PacketQueue::new());
 // resources to hold the sockets used by the net driver.
 // One for DHCP/DNS, One for Flashing, one for Logging and one for NATS
-static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
+static RESOURCES: ConstStaticCell<StackResources<4>> = ConstStaticCell::new(StackResources::new());
 
 // buffers for tcp data before and after processing
-static NATS_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-static NATS_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static NATS_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
+static NATS_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 
-static UPD_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-static UPD_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static UPD_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
+static UPD_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 
-static LOG_TCP_RX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-static LOG_TCP_TX_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+static LOG_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
+static LOG_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 
 // NATS
 const NATS_MAX_TOPIC_SIZE: usize = 64;
@@ -91,6 +90,10 @@ const NATS_NUM_SUBS: usize = 2;
 static TM_CHANNEL: TMChannel = TMChannel::new();
 
 // Devices
+// GPS
+static GNSS_UART_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
+
+// Steppers
 const AZ_STEPPS_PER_REV: u32 = 12_000;
 const AZ_MAX_SPEED: f64 = 1.5; // rad/s
 const AZ_ACCELERATION: f64 = 1.2; // rad/s^2
@@ -99,12 +102,15 @@ const EL_STEPPS_PER_REV: u32 = 24_000;
 const EL_MAX_SPEED: f64 = 2.0; // rad/s
 const EL_ACCELERATION: f64 = 1.5; // rad/s^2
 
-type EthDevice = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
+type EthDevice = Ethernet<'static, peripherals::ETH, GenericPhy<Sma<'static, peripherals::ETH_SMA>>>;
 
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
     FLASH => flash::InterruptHandler;
-    RNG => rng::InterruptHandler<RNG>;
+    RNG => rng::InterruptHandler<peripherals::RNG>;
+    USART3 => usart::InterruptHandler<peripherals::USART3>;
+    DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
+    DMA1_STREAM1 => dma::InterruptHandler<peripherals::DMA1_CH1>;
 });
 
 fn get_rcc_config() -> rcc::Config {
@@ -135,44 +141,29 @@ fn get_rcc_config() -> rcc::Config {
 
 /// Watchdog petting task
 #[embassy_executor::task]
-async fn petter(mut watchdog: IndependentWatchdog<'static, IWDG1>) {
+async fn petter(mut watchdog: IndependentWatchdog<'static, peripherals::IWDG1>) {
     loop {
         watchdog.pet();
         Timer::after_micros(WATCHDOG_PETTING_INTERVAL_US.into()).await;
     }
 }
 
-#[embassy_executor::task]
-pub async fn ctrl_task(mut control_loop: ControlLoop<'static>) -> ! {
-    control_loop.run().await
+macro_rules! runner_task {
+    ($name: ident, $type: ty) => {
+        #[embassy_executor::task]
+        pub async fn $name(mut runner: $type) -> ! {
+            runner.run().await
+        }
+    };
 }
 
-#[embassy_executor::task]
-pub async fn tm_task(mut tm_loop: TMLoop<'static>) -> ! {
-    tm_loop.run().await
-}
-
-#[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, EthDevice>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn logger_task(mut runner: TcpLogger<'static>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn firmware_manager_task(mut runner: FirmwareManager<'static>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn nats_task(
-    mut runner: embassy_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>,
-) -> ! {
-    runner.run().await
-}
+runner_task!(ctrl_task, ControlLoop<'static>);
+runner_task!(gnss_task, Gnss<'static>);
+runner_task!(tm_task, TMLoop<'static>);
+runner_task!(net_task, embassy_net::Runner<'static, EthDevice>);
+runner_task!(logger_task, TcpLogger<'static>);
+runner_task!(firmware_manager_task, FirmwareManager<'static>);
+runner_task!(nats_task, embassy_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>);
 
 async fn resolve_addr(
     stack: &Stack<'_>,
@@ -227,7 +218,7 @@ async fn main(spawner: Spawner) {
 
     // Ethernet device setup
     let device = Ethernet::new(
-        PACKET_QUEUE.init(PacketQueue::<4, 4>::new()),
+        PACKET_QUEUE.take(),
         eth_int,
         Irqs,
         ref_clk,
@@ -248,7 +239,7 @@ async fn main(spawner: Spawner) {
     // Initialize network stack
     info!("Initializing network task");
     let (stack, runner) =
-        embassy_net::new(device, net_cfg, RESOURCES.init(StackResources::new()), seed);
+        embassy_net::new(device, net_cfg, RESOURCES.take(), seed);
 
     // Launch watchdog task
     spawner.spawn(petter(watchdog).unwrap());
@@ -263,8 +254,8 @@ async fn main(spawner: Spawner) {
     // Initialize logger socket
     let socket = TcpSocket::new(
         stack,
-        LOG_TCP_RX_BUF.init([0; _]),
-        LOG_TCP_TX_BUF.init([0; _]),
+        LOG_TCP_RX_BUF.take(),
+        LOG_TCP_TX_BUF.take(),
     );
 
     // Initialize logger
@@ -276,13 +267,13 @@ async fn main(spawner: Spawner) {
     // Initialize updater socket
     let socket = TcpSocket::new(
         stack,
-        UPD_TCP_RX_BUF.init([0; _]),
-        UPD_TCP_TX_BUF.init([0; _]),
+        UPD_TCP_RX_BUF.take(),
+        UPD_TCP_TX_BUF.take(),
     );
 
     // Initialize firmware manager
     let flash = Flash::new(p.FLASH, Irqs);
-    let storage = FIRMWARE_STORAGE.init(FirmwareManagerStorage::new(flash).await);
+    let storage = FIRMWARE_STORAGE.init(FirmwareManagerStorage::new(flash));
     let runner = FirmwareManager::new(storage, socket, FIRMWARE_UPDATE_PORT).await;
 
     // launch firmware manager task
@@ -291,8 +282,8 @@ async fn main(spawner: Spawner) {
     // Initizlize Nats socket
     let socket = TcpSocket::new(
         stack,
-        NATS_TCP_RX_BUF.init([0; _]),
-        NATS_TCP_TX_BUF.init([0; _]),
+        NATS_TCP_RX_BUF.take(),
+        NATS_TCP_TX_BUF.take(),
     );
 
     // resolve nats addr
@@ -317,6 +308,16 @@ async fn main(spawner: Spawner) {
     // launch tm loop
     let tm_loop = TMLoop::new(client.clone(), &TM_CHANNEL);
     spawner.spawn(tm_task(tm_loop).unwrap());
+
+    // launch gnss loop
+    // PPS on PD10
+    let mut config = usart::Config::default();
+    config.swap_rx_tx = true;
+    config.baudrate = 9600;
+    let uart = Uart::new(p.USART3, p.PD9, p.PD8, p.DMA1_CH0, p.DMA1_CH1, Irqs, config).unwrap();
+    let (_writer, reader) = uart.split();
+    let gnss = Gnss::new(reader.into_ring_buffered(GNSS_UART_RX_BUF.take()));
+    spawner.spawn(gnss_task(gnss).unwrap());
 
     // Azimut stepper setup
     let step = PulsePin::new(p.PB0);

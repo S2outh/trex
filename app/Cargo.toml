@@ -38,7 +38,11 @@ embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", 
 embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt"] }
 # embassy-nats = { path = "/home/eliseoc/WueSpace/South/Lib/embassy-nats", features = ["defmt"] }
 
+nmea = { version = "0.8.0", default-features = false, features = ["GNSS", "defmt"] }
+
 portable-atomic = { version = "1.15.0", features = ["float"] }
 heapless = "0.9.3"
 critical-section = "1.2.0"
 libm = "0.2.16"
+thiserror = { version = "2.0.21", default-features = false }
+panic-halt = "1.0.0"
