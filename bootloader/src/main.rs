@@ -5,7 +5,7 @@ use core::cell::RefCell;
 
 use cortex_m_rt::{entry, exception};
 use embassy_boot_stm32::{BootLoader, BootLoaderConfig};
-use embassy_stm32::flash::{BANK1_REGION, Flash};
+use embassy_stm32::flash::{self, BANK1_REGION, Flash};
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::Mutex;
 
@@ -16,7 +16,8 @@ const WATCHDOG_TIMEOUT_US: u32 = 12_000_000;
 #[entry]
 fn main() -> ! {
     let p = embassy_stm32::init(Default::default());
-    let layout = Flash::new_blocking(p.FLASH).into_blocking_regions();
+    let config = flash::Config::default();
+    let layout = Flash::new_blocking(p.FLASH, config).into_blocking_regions();
     let flash = Mutex::new(RefCell::new(layout.bank1_region));
 
     let config = BootLoaderConfig::from_linkerfile_blocking(&flash, &flash, &flash);

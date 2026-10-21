@@ -22,7 +22,7 @@ impl<'d, T: GeneralInstance4Channel> StepCounter<'d, T> {
 
         // Counter (slave timer) configuration
         inner.set_counting_mode(CountingMode::EdgeAlignedUp);
-        inner.set_slave_mode(SlaveMode::EXT_CLOCK_MODE);
+        inner.set_slave_mode(SlaveMode::ExtClockMode);
         inner.set_trigger_source(trigger);
 
         // Disable prescaler, and set timer rollover value to MAX for free running

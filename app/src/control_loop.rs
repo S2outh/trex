@@ -18,19 +18,19 @@ use crate::tm_loop::AxisState;
 use crate::tm_loop::TMChannel;
 use crate::{NATS_NUM_SUBS, NatsCollections, control_loop::axis::Axis};
 
-type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
-type NatsMsg = embassy_nats::NatsMsg<NatsCollections>;
+type NatsClient<'a> = embedded_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
+type NatsMsg = embedded_nats::NatsMsg<NatsCollections>;
 
 type AzimutAxis<'a> = Axis<'a, peripherals::TIM3, peripherals::TIM24, timer::Ch3>;
 type ElevationAxis<'a> = Axis<'a, peripherals::TIM2, peripherals::TIM23, timer::Ch1>;
 
 const NATS_MSG_CHANNEL_SIZE: usize = 3;
 
-static S_CH: embassy_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> =
-    embassy_nats::MsgChannel::new();
+static S_CH: embedded_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> =
+    embedded_nats::MsgChannel::new();
 
-static C_CH: embassy_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> =
-    embassy_nats::MsgChannel::new();
+static C_CH: embedded_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> =
+    embedded_nats::MsgChannel::new();
 
 struct Axs<'a> {
     azimut: AzimutAxis<'a>,

@@ -10,7 +10,7 @@ use portable_atomic::AtomicF64;
 use serde::Serialize;
 
 use crate::{NATS_MAX_MESSAGE_SIZE, NATS_NUM_SUBS, NatsCollections};
-type NatsClient<'a> = embassy_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
+type NatsClient<'a> = embedded_nats::Client<'a, NatsCollections, NATS_NUM_SUBS>;
 
 pub struct AtomicState {
     state: AtomicU8,

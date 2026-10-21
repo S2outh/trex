@@ -1,7 +1,7 @@
 use embassy_boot_stm32::{AlignedBuffer, FirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_futures::yield_now;
-use embassy_net::tcp::{self, TcpSocket};
-use embassy_stm32::flash::{Async, Flash, WRITE_SIZE};
+use embassy_net::tcp::{self, TcpSocket, TcpListener};
+use embassy_stm32::{flash::{Flash, WRITE_SIZE}, mode::Async};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 use trex_firmware_transport::*;
@@ -9,7 +9,7 @@ use trex_firmware_transport::*;
 type Partition<'a> = embassy_embedded_hal::flash::partition::Partition<
     'a,
     NoopRawMutex,
-    embassy_stm32::flash::Flash<'a>,
+    embassy_stm32::flash::Flash<'a, Async>,
 >;
 type MtxFlash<'a> = Mutex<NoopRawMutex, Flash<'a, Async>>;
 
@@ -30,16 +30,16 @@ impl<'a> FirmwareManagerStorage<'a> {
 
 pub struct FirmwareManager<'a> {
     updater: FirmwareUpdater<'a, Partition<'a>, Partition<'a>>,
-    socket: TcpSocket<'a>,
-    port: u16,
+    listener: TcpListener<'a>,
+    socket: TcpSocket<'a, 'a>,
     validated: bool,
 }
 
 impl<'a> FirmwareManager<'a> {
     pub async fn new(
         storage: &'a mut FirmwareManagerStorage<'a>,
-        socket: TcpSocket<'a>,
-        port: u16,
+        listener: TcpListener<'a>,
+        socket: TcpSocket<'a, 'a>,
     ) -> Self {
         let config = FirmwareUpdaterConfig::from_linkerfile(&storage.flash, &storage.flash);
         let mut updater = FirmwareUpdater::new(config, &mut storage.magic.0);
@@ -58,8 +58,8 @@ impl<'a> FirmwareManager<'a> {
 
         Self {
             updater,
+            listener,
             socket,
-            port,
             validated,
         }
     }
@@ -159,14 +159,17 @@ impl<'a> FirmwareManager<'a> {
 
                     defmt::info!("[FW MGR] Trying to apply new firmware...");
 
+
+                    const HASH_CHUNK_SIZE: usize = 64;
+                    let mut chunk_buf = AlignedBuffer([0u8; HASH_CHUNK_SIZE]);
                     if let Err(e) = self
                         .updater
-                        .verify_and_mark_updated(
-                            PUBLIC_KEY.try_into().unwrap(),
+                        .verify_and_mark_updated::<embassy_crypto::Sha512, embassy_crypto::ed25519::VerifyingKey>(
+                            PUBLIC_KEY,
                             &signature,
+                            chunk_buf.as_mut(),
                             size as u32,
-                        )
-                        .await
+                        ).await
                     {
                         defmt::error!("[FW MGR] Could not verify firmware: {}", e);
                         if self.respond(Response::Fail).await.is_err() {
@@ -204,7 +207,10 @@ impl<'a> FirmwareManager<'a> {
     pub async fn run(&mut self) -> ! {
         loop {
             defmt::info!("[FW MGR] Waiting for connections...");
-            if self.socket.accept(self.port).await.is_err() {
+            let Ok(token) = self.listener.accept().await else {
+                continue;
+            };
+            if self.socket.accept(token).await.is_err() {
                 self.disconnect().await;
                 continue;
             }

@@ -16,7 +16,11 @@ cortex-m.workspace = true
 cortex-m-rt.workspace = true
 
 embassy-boot-stm32 = { workspace = true, features = ["defmt"] }
-embassy-boot = { version = "0.7.0", features = ["ed25519-salty"] }
+embassy-boot = { version = "0.7.0" }
+
+#embassy-crypto = { version = "0.1.0" }
+embassy-crypto = { git = "https://github.com/embassy-rs/embassy" }
+mcu-crypto-asm = { git = "https://github.com/kokroo/mcu-crypto-asm.git", features = ["embassy-crypto-sha512", "embassy-crypto-ed25519"] }
 
 defmt.workspace = true
 
@@ -33,12 +37,11 @@ static_cell = { version = "2.1.1", features = ["nightly"] }
 embedded-storage-async = "0.4.2"
 embassy-embedded-hal = "0.6.0"
 
-embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "proto-ipv6", "dns"] }
+embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "dns", "tcp-listener" ] }
 
-embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt"] }
-# embassy-nats = { path = "/home/eliseoc/WueSpace/South/Lib/embassy-nats", features = ["defmt"] }
+embedded-nats = { git = "https://github.com/S2outh/embedded-nats.git", branch = "unstable-embassy", features = ["defmt"] }
 
-nmea = { version = "0.8.0", default-features = false, features = ["GNSS", "defmt"] }
+nmea = { version = "0.8.0", default-features = false, features = ["GGA", "defmt"] }
 
 portable-atomic = { version = "1.15.0", features = ["float"] }
 heapless = "0.9.3"
