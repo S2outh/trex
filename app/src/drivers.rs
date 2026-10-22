@@ -1,2 +1,2 @@
-pub mod stepper;
 pub mod gnss;
+pub mod stepper;

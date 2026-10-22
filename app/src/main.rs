@@ -1,18 +1,17 @@
 #![no_std]
 #![no_main]
 
-
 use panic_halt as _;
 
 use mcu_crypto_asm as _;
 
 use defmt::{info, warn};
 use embassy_executor::Spawner;
-use embassy_net::dns::DnsQueryType;
-use embassy_net::wire::{IpCidr, IpAddr, Ipv4Addr, SocketAddr};
-use embassy_net::tcp::{TcpListener, TcpSocket};
-use embassy_net::{StackStorage, StaticPool};
 use embassy_net::Stack;
+use embassy_net::dns::DnsQueryType;
+use embassy_net::tcp::{TcpListener, TcpSocket};
+use embassy_net::wire::{IpAddr, IpCidr, Ipv4Addr, SocketAddr};
+use embassy_net::{StackStorage, StaticPool};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
 use embassy_stm32::gpio::{Output, Speed};
@@ -29,6 +28,7 @@ use static_cell::{ConstStaticCell, StaticCell};
 use embedded_nats::UserPwdAuthenticator;
 
 use crate::control_loop::ControlLoop;
+use crate::control_loop::axis::controller::PidParams;
 use crate::control_loop::axis::{Axis, AxisConfig};
 use crate::drivers::gnss::Gnss;
 use crate::drivers::stepper::step_counter::StepCounter;
@@ -69,7 +69,8 @@ static POOL: StaticPool<1520, 16, 8> = StaticPool::new();
 static STACK: StaticCell<StackStorage> = StaticCell::new();
 
 // Ethernet device storage
-type EthDevice = Ethernet<'static, peripherals::ETH, GenericPhy<Sma<'static, peripherals::ETH_SMA>>>;
+type EthDevice =
+    Ethernet<'static, peripherals::ETH, GenericPhy<Sma<'static, peripherals::ETH_SMA>>>;
 static DEVICE: StaticCell<EthDevice> = StaticCell::new();
 
 // buffers for tcp data before and after processing
@@ -167,7 +168,10 @@ runner_task!(tm_task, TMLoop<'static>);
 runner_task!(net_task, embassy_net::Runner<'static>);
 runner_task!(logger_task, TcpLogger<'static>);
 runner_task!(firmware_manager_task, FirmwareManager<'static>);
-runner_task!(nats_task, embedded_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>);
+runner_task!(
+    nats_task,
+    embedded_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>
+);
 
 async fn resolve_addr(
     stack: &Stack<'_>,
@@ -239,17 +243,20 @@ async fn main(spawner: Spawner) {
         mdio,
         mdc,
         Irqs,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Initialize network stack
     info!("Initializing network task");
-    let (stack, runner) =
-        embassy_net::Stack::new(STACK.init(StackStorage::new()), &POOL, seed);
+    let (stack, runner) = embassy_net::Stack::new(STACK.init(StackStorage::new()), &POOL, seed);
 
     let iface = stack.add_iface_borrowed(DEVICE.init(device)).unwrap();
-    
+
     iface.add_ip_addr(IP_CIDR).unwrap();
-    stack.routes().add_default_ipv4_route(GATEWAY, iface.handle()).unwrap();
+    stack
+        .routes()
+        .add_default_ipv4_route(GATEWAY, iface.handle())
+        .unwrap();
     stack.set_dns_servers(&[DNS_SERVER]);
 
     // Launch network task
@@ -260,11 +267,7 @@ async fn main(spawner: Spawner) {
     info!("Network initialized");
 
     // Initialize logger socket
-    let socket = TcpSocket::new(
-        stack,
-        LOG_TCP_RX_BUF.take(),
-        LOG_TCP_TX_BUF.take(),
-    ).unwrap();
+    let socket = TcpSocket::new(stack, LOG_TCP_RX_BUF.take(), LOG_TCP_TX_BUF.take()).unwrap();
 
     let mut listener = TcpListener::new(stack).unwrap();
     listener.listen(LOGGER_PORT).unwrap();
@@ -276,11 +279,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(logger_task(runner).unwrap());
 
     // Initialize updater socket
-    let socket = TcpSocket::new(
-        stack,
-        UPD_TCP_RX_BUF.take(),
-        UPD_TCP_TX_BUF.take(),
-    ).unwrap();
+    let socket = TcpSocket::new(stack, UPD_TCP_RX_BUF.take(), UPD_TCP_TX_BUF.take()).unwrap();
 
     let mut listener = TcpListener::new(stack).unwrap();
     listener.listen(FIRMWARE_UPDATE_PORT).unwrap();
@@ -295,11 +294,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(firmware_manager_task(runner).unwrap());
 
     // Initizlize Nats socket
-    let socket = TcpSocket::new(
-        stack,
-        NATS_TCP_RX_BUF.take(),
-        NATS_TCP_TX_BUF.take(),
-    ).unwrap();
+    let socket = TcpSocket::new(stack, NATS_TCP_RX_BUF.take(), NATS_TCP_TX_BUF.take()).unwrap();
 
     // resolve nats addr
     let socket_addr = loop {
@@ -360,18 +355,48 @@ async fn main(spawner: Spawner) {
     let mut _red_led = Output::new(p.PE0, Level::High, Speed::Low);
 
     // setup control loop
-    let azimut = Axis::new(azimut_stepper, AxisConfig {
-        max_speed: AZ_MAX_SPEED,
-        acceleration: AZ_ACCELERATION,
-        lower_bound: -core::f64::consts::PI,
-        upper_bound: core::f64::consts::PI,
-    });
-    let elevation = Axis::new(elevation_stepper, AxisConfig {
-        max_speed: EL_MAX_SPEED,
-        acceleration: EL_ACCELERATION,
-        lower_bound: -core::f64::consts::PI,
-        upper_bound: core::f64::consts::PI,
-    });
+    let azimut = Axis::new(
+        azimut_stepper,
+        AxisConfig {
+            max_speed: AZ_MAX_SPEED,
+            acceleration: AZ_ACCELERATION,
+            lower_bound: -core::f64::consts::PI,
+            upper_bound: core::f64::consts::PI,
+            v_pid_params: PidParams {
+                kp: 4.,
+                ki: Some((0.2, 5.)),
+                kd: Some(3.0),
+                deadband: 0.06,
+            },
+            a_pid_params: PidParams {
+                kp: 0.7,
+                ki: Some((0.2, 5.)),
+                kd: None,
+                deadband: 0.02,
+            },
+        },
+    );
+    let elevation = Axis::new(
+        elevation_stepper,
+        AxisConfig {
+            max_speed: EL_MAX_SPEED,
+            acceleration: EL_ACCELERATION,
+            lower_bound: -core::f64::consts::PI / 2.,
+            upper_bound: core::f64::consts::PI / 2.,
+            v_pid_params: PidParams {
+                kp: 4.,
+                ki: Some((0.2, 5.)),
+                kd: Some(3.0),
+                deadband: 0.06,
+            },
+            a_pid_params: PidParams {
+                kp: 0.7,
+                ki: Some((0.2, 5.)),
+                kd: None,
+                deadband: 0.02,
+            },
+        },
+    );
 
     // launch control loop
     let control_loop = ControlLoop::new(client, &TM_CHANNEL, azimut, elevation);

@@ -1,4 +1,3 @@
-
 pub struct KinematicLimiter {
     lower_bound: f64,
     upper_bound: f64,
@@ -7,7 +6,11 @@ pub struct KinematicLimiter {
 
 impl KinematicLimiter {
     pub fn new(lower_bound: f64, upper_bound: f64, a_max: f64) -> Self {
-        Self { lower_bound, upper_bound, a_max }
+        Self {
+            lower_bound,
+            upper_bound,
+            a_max,
+        }
     }
     fn get_limit_vel(&self, pos: f64, limit: f64) -> f64 {
         let limit_dist = limit - pos;

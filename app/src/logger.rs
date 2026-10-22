@@ -4,7 +4,7 @@ use core::{
 };
 
 use critical_section::RestoreState;
-use embassy_net::tcp::{self, TcpSocket, TcpListener};
+use embassy_net::tcp::{self, TcpListener, TcpSocket};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pipe::Pipe};
 use embassy_time::Duration;
 use portable_atomic::AtomicU32;
@@ -156,10 +156,7 @@ pub struct TcpLogger<'a> {
 }
 
 impl<'a> TcpLogger<'a> {
-    pub fn new(
-        listener: TcpListener<'a>,
-        socket: TcpSocket<'a, 'a>,
-    ) -> Self {
+    pub fn new(listener: TcpListener<'a>, socket: TcpSocket<'a, 'a>) -> Self {
         Self { listener, socket }
     }
 

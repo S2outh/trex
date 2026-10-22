@@ -1,10 +1,14 @@
 use embassy_stm32::timer::{GeneralInstance4Channel, TimerChannel};
 
-mod ramp_controller;
+pub mod controller;
 mod kinematic_limiter;
 
 use crate::{
-    control_loop::axis::{kinematic_limiter::KinematicLimiter, ramp_controller::TrapezoidRampController}, drivers::stepper::Stepper,
+    control_loop::axis::{
+        controller::{PidParams, StagedPID},
+        kinematic_limiter::KinematicLimiter,
+    },
+    drivers::stepper::Stepper,
 };
 
 pub struct AxisConfig {
@@ -12,6 +16,8 @@ pub struct AxisConfig {
     pub acceleration: f64,
     pub lower_bound: f64,
     pub upper_bound: f64,
+    pub v_pid_params: PidParams,
+    pub a_pid_params: PidParams,
 }
 
 pub struct Axis<'d, T, TC, C>
@@ -21,13 +27,9 @@ where
     C: TimerChannel,
 {
     stepper: Stepper<'d, T, TC, C>,
-    controller: TrapezoidRampController,
+    controller: StagedPID,
     limiter: KinematicLimiter,
-    acceleration: f64,
 }
-
-// limits
-const DEADBAND: f64 = 0.05; // rad
 
 impl<'d, T, TC, C> Axis<'d, T, TC, C>
 where
@@ -36,13 +38,13 @@ where
     C: TimerChannel,
 {
     pub fn new(stepper: Stepper<'d, T, TC, C>, config: AxisConfig) -> Self {
-        let controller = TrapezoidRampController::new(config.acceleration, config.max_speed);
-        let limiter = KinematicLimiter::new(config.lower_bound, config.upper_bound, config.acceleration);
+        let controller = StagedPID::new(config.acceleration, config.v_pid_params, config.a_pid_params);
+        let limiter =
+            KinematicLimiter::new(config.lower_bound, config.upper_bound, config.acceleration);
         Self {
             stepper,
             controller,
             limiter,
-            acceleration: config.acceleration,
         }
     }
 
@@ -50,20 +52,10 @@ where
         let current_pos = self.stepper.get_pos();
         let current_vel = self.stepper.get_vel();
         let relative_pos = target_pos - current_pos;
-        let relative_vel = current_vel - target_vel;
 
-        // calculate velocity deadband from acceleration to prevent overshoot
-        let velocity_db = dt * self.acceleration;
-        if relative_pos.abs() < DEADBAND && relative_vel.abs() < velocity_db {
-            if current_vel < velocity_db {
-                self.stepper.stop();
-            } else {
-                self.stepper.set_vel(target_vel);
-            }
-            return;
-        }
-
-        let optimal_vel = target_vel + self.controller.update(relative_vel, relative_pos, dt);
+        let optimal_vel = self
+            .controller
+            .update(relative_pos, current_vel, target_vel, dt);
         let limited_vel = self.limiter.clamp_vel(target_pos, optimal_vel);
 
         self.stepper.set_vel(limited_vel);

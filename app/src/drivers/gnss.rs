@@ -29,7 +29,7 @@ impl<'a> Gnss<'a> {
             if *byte == DELIM[delim_pos] {
                 delim_pos += 1;
                 if delim_pos >= DELIM.len() {
-                    return Ok(pos)
+                    return Ok(pos);
                 }
             }
             buf = &mut buf[1..];

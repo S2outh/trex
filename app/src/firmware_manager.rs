@@ -1,7 +1,10 @@
 use embassy_boot_stm32::{AlignedBuffer, FirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_futures::yield_now;
-use embassy_net::tcp::{self, TcpSocket, TcpListener};
-use embassy_stm32::{flash::{Flash, WRITE_SIZE}, mode::Async};
+use embassy_net::tcp::{self, TcpListener, TcpSocket};
+use embassy_stm32::{
+    flash::{Flash, WRITE_SIZE},
+    mode::Async,
+};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 use trex_firmware_transport::*;
@@ -158,7 +161,6 @@ impl<'a> FirmwareManager<'a> {
                     }
 
                     defmt::info!("[FW MGR] Trying to apply new firmware...");
-
 
                     const HASH_CHUNK_SIZE: usize = 64;
                     let mut chunk_buf = AlignedBuffer([0u8; HASH_CHUNK_SIZE]);
