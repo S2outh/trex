@@ -102,12 +102,44 @@ static GNSS_UART_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _
 
 // Steppers
 const AZ_STEPPS_PER_REV: u32 = 12_000;
-const AZ_MAX_SPEED: f64 = 1.5; // rad/s
-const AZ_ACCELERATION: f64 = 1.2; // rad/s^2
+const AZ_AXIS_CONFIG: AxisConfig = AxisConfig {
+    max_speed: 1.5,    // rad/s
+    acceleration: 1.2, // rad/s^2
+    lower_bound: -core::f64::consts::PI / 2.,
+    upper_bound: core::f64::consts::PI / 2.,
+    v_pid_params: PidParams {
+        kp: 2.,
+        ki: Some((0.2, 5.)),
+        kd: Some(3.0),
+        deadband: 0.01,
+    },
+    a_pid_params: PidParams {
+        kp: 1.0,
+        ki: Some((0.2, 5.)),
+        kd: None,
+        deadband: 0.01,
+    },
+};
 
 const EL_STEPPS_PER_REV: u32 = 24_000;
-const EL_MAX_SPEED: f64 = 2.0; // rad/s
-const EL_ACCELERATION: f64 = 1.5; // rad/s^2
+const EL_AXIS_CONFIG: AxisConfig = AxisConfig {
+    max_speed: 2.0,    // rad/s
+    acceleration: 1.5, // rad/s^2
+    lower_bound: -core::f64::consts::PI / 2.,
+    upper_bound: core::f64::consts::PI / 2.,
+    v_pid_params: PidParams {
+        kp: 4.,
+        ki: Some((0.2, 5.)),
+        kd: Some(2.0),
+        deadband: 0.01,
+    },
+    a_pid_params: PidParams {
+        kp: 1.0,
+        ki: Some((0.1, 5.)),
+        kd: None,
+        deadband: 0.01,
+    },
+};
 
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler<peripherals::ETH>;
@@ -355,48 +387,8 @@ async fn main(spawner: Spawner) {
     let mut _red_led = Output::new(p.PE0, Level::High, Speed::Low);
 
     // setup control loop
-    let azimut = Axis::new(
-        azimut_stepper,
-        AxisConfig {
-            max_speed: AZ_MAX_SPEED,
-            acceleration: AZ_ACCELERATION,
-            lower_bound: -core::f64::consts::PI,
-            upper_bound: core::f64::consts::PI,
-            v_pid_params: PidParams {
-                kp: 4.,
-                ki: Some((0.2, 5.)),
-                kd: Some(3.0),
-                deadband: 0.06,
-            },
-            a_pid_params: PidParams {
-                kp: 0.7,
-                ki: Some((0.2, 5.)),
-                kd: None,
-                deadband: 0.02,
-            },
-        },
-    );
-    let elevation = Axis::new(
-        elevation_stepper,
-        AxisConfig {
-            max_speed: EL_MAX_SPEED,
-            acceleration: EL_ACCELERATION,
-            lower_bound: -core::f64::consts::PI / 2.,
-            upper_bound: core::f64::consts::PI / 2.,
-            v_pid_params: PidParams {
-                kp: 4.,
-                ki: Some((0.2, 5.)),
-                kd: Some(3.0),
-                deadband: 0.06,
-            },
-            a_pid_params: PidParams {
-                kp: 0.7,
-                ki: Some((0.2, 5.)),
-                kd: None,
-                deadband: 0.02,
-            },
-        },
-    );
+    let azimut = Axis::new(azimut_stepper, AZ_AXIS_CONFIG);
+    let elevation = Axis::new(elevation_stepper, EL_AXIS_CONFIG);
 
     // launch control loop
     let control_loop = ControlLoop::new(client, &TM_CHANNEL, azimut, elevation);

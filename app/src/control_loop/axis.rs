@@ -38,9 +38,17 @@ where
     C: TimerChannel,
 {
     pub fn new(stepper: Stepper<'d, T, TC, C>, config: AxisConfig) -> Self {
-        let controller = StagedPID::new(config.acceleration, config.v_pid_params, config.a_pid_params);
-        let limiter =
-            KinematicLimiter::new(config.lower_bound, config.upper_bound, config.acceleration);
+        let controller = StagedPID::new(
+            config.acceleration,
+            config.v_pid_params,
+            config.a_pid_params,
+        );
+        let limiter = KinematicLimiter::new(
+            config.lower_bound,
+            config.upper_bound,
+            config.max_speed,
+            config.acceleration,
+        );
         Self {
             stepper,
             controller,
@@ -56,7 +64,7 @@ where
         let optimal_vel = self
             .controller
             .update(relative_pos, current_vel, target_vel, dt);
-        let limited_vel = self.limiter.clamp_vel(target_pos, optimal_vel);
+        let limited_vel = self.limiter.clamp_vel(current_pos, optimal_vel);
 
         self.stepper.set_vel(limited_vel);
     }
