@@ -120,15 +120,15 @@ const AZ_AXIS_CONFIG: AxisConfig = AxisConfig {
     upper_bound: core::f64::consts::PI / 2.,
     v_pid_params: PidParams {
         kp: 2.,
-        ki: Some((0.2, 5.)),
-        kd: Some(3.0),
-        deadband: 0.01,
+        ki: Some((0.05, 3.)),
+        kd: Some(0.1),
+        deadband: 0.001,
     },
     a_pid_params: PidParams {
-        kp: 1.0,
-        ki: Some((0.2, 5.)),
+        kp: 10.0,
+        ki: None,
         kd: None,
-        deadband: 0.01,
+        deadband: 0.00,
     },
 };
 
@@ -139,16 +139,16 @@ const EL_AXIS_CONFIG: AxisConfig = AxisConfig {
     lower_bound: -core::f64::consts::PI / 2.,
     upper_bound: core::f64::consts::PI / 2.,
     v_pid_params: PidParams {
-        kp: 4.,
-        ki: Some((0.2, 5.)),
-        kd: Some(2.0),
-        deadband: 0.01,
+        kp: 3.,
+        ki: Some((0.075, 3.)),
+        kd: Some(0.1),
+        deadband: 0.0005,
     },
     a_pid_params: PidParams {
-        kp: 1.0,
-        ki: Some((0.1, 5.)),
+        kp: 15.0,
+        ki: None,
         kd: None,
-        deadband: 0.01,
+        deadband: 0.00,
     },
 };
 
