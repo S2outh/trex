@@ -37,9 +37,9 @@ static_cell = { version = "2.1.1", features = ["nightly"] }
 embedded-storage-async = "0.4.2"
 embassy-embedded-hal = "0.6.0"
 
-embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "defmt", "medium-ethernet", "dns", "tcp-listener" ] }
+embassy-net = { version = "0.9.1", features = ["tcp", "tcp-listener", "embedded-nal", "dns", "dhcpv4", "defmt", "medium-ethernet" ] }
 
-embedded-nats = { git = "https://github.com/S2outh/embedded-nats.git", branch = "unstable-embassy", features = ["defmt"] }
+embedded-nats = { git = "https://github.com/S2outh/embedded-nats.git", features = ["defmt"] }
 
 nmea = { version = "0.8.0", default-features = false, features = ["GGA", "defmt"] }
 

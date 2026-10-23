@@ -1,16 +1,20 @@
 #![no_std]
 #![no_main]
 
+use embassy_net::tcp::client::{TcpClient, TcpClientState};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use panic_halt as _;
 
 use mcu_crypto_asm as _;
+
+use core::net::SocketAddr;
 
 use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_net::Stack;
 use embassy_net::dns::DnsQueryType;
 use embassy_net::tcp::{TcpListener, TcpSocket};
-use embassy_net::wire::{IpAddr, IpCidr, Ipv4Addr, SocketAddr};
+use embassy_net::wire::{IpAddr, IpCidr, Ipv4Addr};
 use embassy_net::{StackStorage, StaticPool};
 use embassy_stm32::eth::{self, Ethernet, GenericPhy, PacketQueue, Sma};
 use embassy_stm32::flash::{self, Flash};
@@ -74,9 +78,6 @@ type EthDevice =
 static DEVICE: StaticCell<EthDevice> = StaticCell::new();
 
 // buffers for tcp data before and after processing
-static NATS_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
-static NATS_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
-
 static UPD_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 static UPD_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 
@@ -84,9 +85,18 @@ static LOG_TCP_RX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _])
 static LOG_TCP_TX_BUF: ConstStaticCell<[u8; 256]> = ConstStaticCell::new([0; _]);
 
 // NATS
+const NATS_NUM_SOCKETS: usize = 1;
+const NATS_TCP_RX_BUF: usize = 256;
+const NATS_TCP_TX_BUF: usize = 256;
+static NATS_TCP_CLIENT_STATE: ConstStaticCell<
+    TcpClientState<NATS_NUM_SOCKETS, NATS_TCP_TX_BUF, NATS_TCP_RX_BUF>,
+> = ConstStaticCell::new(TcpClientState::new());
+type NatsClient = TcpClient<'static, NATS_NUM_SOCKETS, NATS_TCP_TX_BUF, NATS_TCP_RX_BUF>;
+
 const NATS_MAX_TOPIC_SIZE: usize = 64;
 const NATS_MAX_MESSAGE_SIZE: usize = 256;
-type NatsCollections = embedded_nats::Heapless<NATS_MAX_TOPIC_SIZE, NATS_MAX_MESSAGE_SIZE>;
+type NatsCollections =
+    embedded_nats::Heapless<ThreadModeRawMutex, NATS_MAX_TOPIC_SIZE, NATS_MAX_MESSAGE_SIZE>;
 static NATS_STORAGE: embedded_nats::Storage<NatsCollections> = embedded_nats::Storage::new();
 const NATS_ADDR: &str = "nats.lan";
 const NATS_PORT: u16 = 4222;
@@ -94,6 +104,7 @@ const NATS_USER: &str = "nats";
 const NATS_PWD: &str = "south";
 const NATS_NUM_SUBS: usize = 2;
 
+// Atomic based TM sync channel
 static TM_CHANNEL: TMChannel = TMChannel::new();
 
 // Devices
@@ -202,7 +213,13 @@ runner_task!(logger_task, TcpLogger<'static>);
 runner_task!(firmware_manager_task, FirmwareManager<'static>);
 runner_task!(
     nats_task,
-    embedded_nats::Runner<'static, NatsCollections, UserPwdAuthenticator, NATS_NUM_SUBS>
+    embedded_nats::Runner<
+        'static,
+        NatsClient,
+        NatsCollections,
+        UserPwdAuthenticator,
+        NATS_NUM_SUBS,
+    >
 );
 
 async fn resolve_addr(
@@ -325,8 +342,8 @@ async fn main(spawner: Spawner) {
     // launch firmware manager task
     spawner.spawn(firmware_manager_task(runner).unwrap());
 
-    // Initizlize Nats socket
-    let socket = TcpSocket::new(stack, NATS_TCP_RX_BUF.take(), NATS_TCP_TX_BUF.take()).unwrap();
+    // Initizlize Nats client
+    let tcp_client = TcpClient::new(stack, NATS_TCP_CLIENT_STATE.take());
 
     // resolve nats addr
     let socket_addr = loop {
@@ -340,9 +357,14 @@ async fn main(spawner: Spawner) {
     };
 
     // nats connection
-    let (client, runner) =
-        embedded_nats::new_with_user_pwd(NATS_USER, NATS_PWD, socket_addr, socket, &NATS_STORAGE)
-            .unwrap();
+    let (client, runner) = embedded_nats::new_with_user_pwd(
+        NATS_USER,
+        NATS_PWD,
+        socket_addr,
+        tcp_client,
+        &NATS_STORAGE,
+    )
+    .unwrap();
 
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());

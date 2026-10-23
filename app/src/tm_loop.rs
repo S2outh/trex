@@ -169,7 +169,7 @@ impl<'a> TMLoop<'a> {
         }
     }
     pub async fn run(&mut self) -> ! {
-        const TM_INTERVAL: Duration = Duration::from_millis(500);
+        const TM_INTERVAL: Duration = Duration::from_millis(100);
         let mut tm_ticker = Ticker::every(TM_INTERVAL);
         loop {
             let tm = self.tm_channel.load(Ordering::Relaxed);
